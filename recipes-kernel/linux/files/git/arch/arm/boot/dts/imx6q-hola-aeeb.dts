@@ -1,0 +1,33 @@
+/*
+ * Copyright 2014 starterkit.ru
+ *
+ * The code contained herein is licensed under the GNU General Public
+ * License V2.
+ */
+
+/dts-v1/;
+
+#include "imx6q.dtsi"
+#include "imx6qdl-hola.dtsi"
+
+/ {
+	model = "Starterkit i.MX6 Dual Hola-PC Board with Additional Ethernet Extension Board";
+	compatible = "sk,imx6q-hola", "fsl,imx6q-sabresd", "fsl,imx6q";
+
+	memory {
+		reg = <0x10000000 0x40000000>;
+	};
+};
+
+&mxcfb1 {
+	status = "okay";
+};
+
+&pcie {
+	reset-gpio = <&gpio2 14 0>;
+	status = "okay";
+};
+
+&sata {
+	status = "okay";
+};

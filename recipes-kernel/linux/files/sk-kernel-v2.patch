@@ -1,0 +1,2050 @@
+diff -ur fsl/arch/arm/boot/dts/imx6qdl.dtsi sk/arch/arm/boot/dts/imx6qdl.dtsi
+--- fsl/arch/arm/boot/dts/imx6qdl.dtsi	2014-09-18 21:48:51.000000000 +0400
++++ sk/arch/arm/boot/dts/imx6qdl.dtsi	2014-12-09 11:34:16.000000000 +0300
+@@ -836,6 +836,16 @@
+ 				status = "disabled";
+ 			};
+ 
++			usdhc3: usdhc@02198000 {
++				compatible = "fsl,imx6q-usdhc";
++				reg = <0x02198000 0x4000>;
++				interrupts = <0 24 0x04>;
++				clocks = <&clks 165>, <&clks 165>, <&clks 165>;
++				clock-names = "ipg", "ahb", "per";
++				bus-width = <4>;
++				status = "disabled";
++			};
++
+ 			usdhc1: usdhc@02190000 {
+ 				compatible = "fsl,imx6q-usdhc";
+ 				reg = <0x02190000 0x4000>;
+@@ -854,16 +864,6 @@
+ 				clock-names = "ipg", "ahb", "per";
+ 				bus-width = <4>;
+ 				status = "disabled";
+-			};
+-
+-			usdhc3: usdhc@02198000 {
+-				compatible = "fsl,imx6q-usdhc";
+-				reg = <0x02198000 0x4000>;
+-				interrupts = <0 24 0x04>;
+-				clocks = <&clks 165>, <&clks 165>, <&clks 165>;
+-				clock-names = "ipg", "ahb", "per";
+-				bus-width = <4>;
+-				status = "disabled";
+ 			};
+ 
+ 			usdhc4: usdhc@0219c000 {
+diff -ur fsl/arch/arm/boot/dts/Makefile sk/arch/arm/boot/dts/Makefile
+--- fsl/arch/arm/boot/dts/Makefile	2014-09-18 21:48:51.000000000 +0400
++++ sk/arch/arm/boot/dts/Makefile	2014-10-24 21:59:43.000000000 +0400
+@@ -136,6 +136,20 @@
+ 	imx6sl-evk-csi.dtb \
+ 	imx6sl-evk-ldo.dtb \
+ 	imx6sl-evk-pf200.dtb \
++	imx6q-hola.dtb \
++	imx6q-hola-aeeb.dtb \
++	imx6q-hola-feb.dtb \
++	imx6q-hola-ieb.dtb \
++	imx6q-hola-vceb.dtb \
++	imx6dl-hola.dtb \
++	imx6dl-hola-aeeb.dtb \
++	imx6dl-hola-feb.dtb \
++	imx6dl-hola-ieb.dtb \
++	imx6dl-hola-vceb.dtb \
++	imx6dl-oem.dtb \
++	imx6q-sk.dtb \
++	imx6q-sodimm.dtb \
++	imx6dl-sodimm.dtb \
+ 	vf610-twr.dtb
+ dtb-$(CONFIG_ARCH_MXS) += imx23-evk.dtb \
+ 	imx23-olinuxino.dtb \
+diff -ur fsl/arch/arm/mach-imx/busfreq-imx6.c sk/arch/arm/mach-imx/busfreq-imx6.c
+--- fsl/arch/arm/mach-imx/busfreq-imx6.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/arch/arm/mach-imx/busfreq-imx6.c	2014-12-22 01:38:47.000000000 +0300
+@@ -66,6 +66,7 @@
+ static int bus_freq_scaling_is_active;
+ static int high_bus_count, med_bus_count, audio_bus_count, low_bus_count;
+ static unsigned int ddr_low_rate;
++static int sk_imx6q_ddr_400;
+ 
+ extern int init_mmdc_lpddr2_settings(struct platform_device *dev);
+ extern int init_mmdc_ddr3_settings(struct platform_device *dev);
+@@ -611,6 +612,11 @@
+ 				 struct device_attribute *attr,
+ 				 const char *buf, size_t size)
+ {
++	if (sk_imx6q_ddr_400) {
++		printk("SK: i.MX6Q DDR 400M, bus frequency scaling is disabled\n");
++		return size;
++	}
++
+ 	if (strncmp(buf, "1", 1) == 0) {
+ 		bus_freq_scaling_is_active = 1;
+ 		set_high_bus_freq(1);
+@@ -888,6 +894,16 @@
+ 		dev_err(busfreq_dev, "Busfreq init of MMDC failed\n");
+ 		return err;
+ 	}
++
++	sk_imx6q_ddr_400 = 0;
++	if (cpu_is_imx6q() && (clk_get_rate(periph_pre_clk) == 396000000)) {
++		clk_set_parent(periph_pre_clk, pll2_400);
++		clk_set_parent(periph_clk, periph_pre_clk);
++
++		sk_imx6q_ddr_400 = 1;
++		printk("SK: i.MX6Q DDR 400M, disable bus frequency scaling\n");
++		bus_freq_scaling_is_active = 0;
++	}
+ 	return 0;
+ }
+ 
+diff -ur fsl/arch/arm/mach-imx/clk-imx6q.c sk/arch/arm/mach-imx/clk-imx6q.c
+--- fsl/arch/arm/mach-imx/clk-imx6q.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/arch/arm/mach-imx/clk-imx6q.c	2014-12-22 01:38:47.000000000 +0300
+@@ -587,10 +587,7 @@
+ 	/* Make sure PFDs are disabled at boot. */
+ 	reg = readl_relaxed(anatop_base + 0x100);
+ 	/* Cannot disable pll2_pfd2_396M, as it is the MMDC clock in iMX6DL */
+-	if (cpu_is_imx6dl())
+-		reg |= 0x80008080;
+-	else
+-		reg |= 0x80808080;
++	reg |= 0x80008080;
+ 	writel_relaxed(reg, anatop_base + 0x100);
+ 
+ 	/* Disable PLL3 PFDs. */
+diff -ur fsl/drivers/input/touchscreen/ads7846.c sk/drivers/input/touchscreen/ads7846.c
+--- fsl/drivers/input/touchscreen/ads7846.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/input/touchscreen/ads7846.c	2014-10-24 21:56:06.000000000 +0400
+@@ -27,6 +27,9 @@
+ #include <linux/interrupt.h>
+ #include <linux/slab.h>
+ #include <linux/pm.h>
++#include <linux/of.h>
++#include <linux/of_gpio.h>
++#include <linux/of_device.h>
+ #include <linux/gpio.h>
+ #include <linux/spi/spi.h>
+ #include <linux/spi/ads7846.h>
+@@ -104,12 +107,8 @@
+ #endif
+ 
+ 	u16			model;
+-	u16			vref_mv;
+ 	u16			vref_delay_usecs;
+-	u16			x_plate_ohms;
+-	u16			pressure_max;
+ 
+-	bool			swap_xy;
+ 	bool			use_internal;
+ 
+ 	struct ads7846_packet	*packet;
+@@ -143,6 +142,9 @@
+ 	int			gpio_pendown;
+ 
+ 	void			(*wait_for_sync)(void);
++
++	/* platform data from board file or DT */
++	struct ads7846_platform_data *pdata;
+ };
+ 
+ /* leave chip selected when we're done, for quicker re-select? */
+@@ -456,7 +458,7 @@
+ 	unsigned retval = v;
+ 
+ 	/* external resistors may scale vAUX into 0..vREF */
+-	retval *= ts->vref_mv;
++	retval *= ts->pdata->vref_mv;
+ 	retval = retval >> 12;
+ 
+ 	return retval;
+@@ -515,25 +517,25 @@
+ 	/* hwmon sensors need a reference voltage */
+ 	switch (ts->model) {
+ 	case 7846:
+-		if (!ts->vref_mv) {
++		if (!ts->pdata->vref_mv) {
+ 			dev_dbg(&spi->dev, "assuming 2.5V internal vREF\n");
+-			ts->vref_mv = 2500;
++			ts->pdata->vref_mv = 2500;
+ 			ts->use_internal = true;
+ 		}
+ 		break;
+ 	case 7845:
+ 	case 7843:
+-		if (!ts->vref_mv) {
++		if (!ts->pdata->vref_mv) {
+ 			dev_warn(&spi->dev,
+ 				"external vREF for ADS%d not specified\n",
+-				ts->model);
++				ts->pdata->model);
+ 			return 0;
+ 		}
+ 		break;
+ 	}
+ 
+ 	/* different chips have different sensor groups */
+-	switch (ts->model) {
++	switch (ts->pdata->model) {
+ 	case 7846:
+ 		ts->attr_group = &ads7846_attr_group;
+ 		break;
+@@ -544,7 +546,7 @@
+ 		ts->attr_group = &ads7843_attr_group;
+ 		break;
+ 	default:
+-		dev_dbg(&spi->dev, "ADS%d not recognized\n", ts->model);
++		dev_dbg(&spi->dev, "ADS%d not recognized\n", ts->pdata->model);
+ 		return 0;
+ 	}
+ 
+@@ -700,7 +702,7 @@
+ 	struct spi_transfer *t =
+ 		list_entry(m->transfers.prev, struct spi_transfer, transfer_list);
+ 
+-	if (ts->model == 7845) {
++	if (ts->pdata->model == 7845) {
+ 		return be16_to_cpup((__be16 *)&(((char*)t->rx_buf)[1])) >> 3;
+ 	} else {
+ 		/*
+@@ -776,6 +778,7 @@
+ static void ads7846_report_state(struct ads7846 *ts)
+ {
+ 	struct ads7846_packet *packet = ts->packet;
++	struct ads7846_platform_data *pdata = ts->pdata;
+ 	unsigned int Rt;
+ 	u16 x, y, z1, z2;
+ 
+@@ -784,7 +787,7 @@
+ 	 * from on-the-wire format as part of debouncing to get stable
+ 	 * readings.
+ 	 */
+-	if (ts->model == 7845) {
++	if (pdata->model == 7845) {
+ 		x = *(u16 *)packet->tc.x_buf;
+ 		y = *(u16 *)packet->tc.y_buf;
+ 		z1 = 0;
+@@ -800,11 +803,11 @@
+ 	if (x == MAX_12BIT)
+ 		x = 0;
+ 
+-	if (ts->model == 7843) {
+-		Rt = ts->pressure_max / 2;
+-	} else if (ts->model == 7845) {
++	if (pdata->model == 7843) {
++		Rt = pdata->pressure_max / 2;
++	} else if (pdata->model == 7845) {
+ 		if (get_pendown_state(ts))
+-			Rt = ts->pressure_max / 2;
++			Rt = pdata->pressure_max / 2;
+ 		else
+ 			Rt = 0;
+ 		dev_vdbg(&ts->spi->dev, "x/y: %d/%d, PD %d\n", x, y, Rt);
+@@ -813,7 +816,7 @@
+ 		Rt = z2;
+ 		Rt -= z1;
+ 		Rt *= x;
+-		Rt *= ts->x_plate_ohms;
++		Rt *= pdata->x_plate_ohms;
+ 		Rt /= z1;
+ 		Rt = (Rt + 2047) >> 12;
+ 	} else {
+@@ -825,7 +828,7 @@
+ 	 * the maximum. Don't report it to user space, repeat at least
+ 	 * once more the measurement
+ 	 */
+-	if (packet->tc.ignore || Rt > ts->pressure_max) {
++	if (packet->tc.ignore || Rt > pdata->pressure_max) {
+ 		dev_vdbg(&ts->spi->dev, "ignored %d pressure %d\n",
+ 			 packet->tc.ignore, Rt);
+ 		return;
+@@ -853,7 +856,7 @@
+ 	if (Rt) {
+ 		struct input_dev *input = ts->input;
+ 
+-		if (ts->swap_xy)
++		if (pdata->swap_xy)
+ 			swap(x, y);
+ 
+ 		if (!ts->pendown) {
+@@ -864,7 +867,7 @@
+ 
+ 		input_report_abs(input, ABS_X, x);
+ 		input_report_abs(input, ABS_Y, y);
+-		input_report_abs(input, ABS_PRESSURE, ts->pressure_max - Rt);
++		input_report_abs(input, ABS_PRESSURE, pdata->pressure_max - Rt);
+ 
+ 		input_sync(input);
+ 		dev_vdbg(&ts->spi->dev, "%4d/%4d/%4d\n", x, y, Rt);
+@@ -963,7 +966,7 @@
+ static int ads7846_setup_pendown(struct spi_device *spi,
+ 					   struct ads7846 *ts)
+ {
+-	struct ads7846_platform_data *pdata = spi->dev.platform_data;
++	struct ads7846_platform_data *pdata = ts->pdata;
+ 	int err;
+ 
+ 	/*
+@@ -1003,20 +1006,20 @@
+  * use formula #2 for pressure, not #3.
+  */
+ static void ads7846_setup_spi_msg(struct ads7846 *ts,
+-				const struct ads7846_platform_data *pdata)
++				  struct ads7846_platform_data *pdata)
+ {
+ 	struct spi_message *m = &ts->msg[0];
+ 	struct spi_transfer *x = ts->xfer;
+ 	struct ads7846_packet *packet = ts->packet;
+ 	int vref = pdata->keep_vref_on;
+ 
+-	if (ts->model == 7873) {
++	if (pdata->model == 7873) {
+ 		/*
+ 		 * The AD7873 is almost identical to the ADS7846
+ 		 * keep VREF off during differential/ratiometric
+ 		 * conversion modes.
+ 		 */
+-		ts->model = 7846;
++		pdata->model = 7846;
+ 		vref = 0;
+ 	}
+ 
+@@ -1024,7 +1027,7 @@
+ 	spi_message_init(m);
+ 	m->context = ts;
+ 
+-	if (ts->model == 7845) {
++	if (pdata->model == 7845) {
+ 		packet->read_y_cmd[0] = READ_Y(vref);
+ 		packet->read_y_cmd[1] = 0;
+ 		packet->read_y_cmd[2] = 0;
+@@ -1069,7 +1072,7 @@
+ 	spi_message_init(m);
+ 	m->context = ts;
+ 
+-	if (ts->model == 7845) {
++	if (pdata->model == 7845) {
+ 		x++;
+ 		packet->read_x_cmd[0] = READ_X(vref);
+ 		packet->read_x_cmd[1] = 0;
+@@ -1108,7 +1111,7 @@
+ 	}
+ 
+ 	/* turn y+ off, x- on; we'll use formula #2 */
+-	if (ts->model == 7846) {
++	if (pdata->model == 7846) {
+ 		ts->msg_count++;
+ 		m++;
+ 		spi_message_init(m);
+@@ -1178,7 +1181,7 @@
+ 	spi_message_init(m);
+ 	m->context = ts;
+ 
+-	if (ts->model == 7845) {
++	if (pdata->model == 7845) {
+ 		x++;
+ 		packet->pwrdown_cmd[0] = PWRDOWN;
+ 		packet->pwrdown_cmd[1] = 0;
+@@ -1201,12 +1204,110 @@
+ 	spi_message_add_tail(x, m);
+ }
+ 
++#ifdef CONFIG_OF
++static const struct of_device_id ads7846_dt_ids[] = {
++	{ .compatible = "ti,tsc2046",	.data = (void *) 7846 },
++	{ .compatible = "ti,ads7843",	.data = (void *) 7843 },
++	{ .compatible = "ti,ads7845",	.data = (void *) 7845 },
++	{ .compatible = "ti,ads7846",	.data = (void *) 7846 },
++	{ .compatible = "ti,ads7873",	.data = (void *) 7873 },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, ads7846_dt_ids);
++
++static struct ads7846_platform_data *ads7846_probe_dt(struct device *dev)
++{
++	struct ads7846_platform_data *pdata = NULL;
++	const struct of_device_id *match;
++	u32 val;
++
++	match = of_match_device(ads7846_dt_ids, dev);
++	if (!match)
++		return NULL;
++
++	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
++	if (!pdata)
++		return NULL;
++
++	pdata->model = (unsigned int) match->data;
++
++	if (of_property_read_u32(dev->of_node, "ti,vref-delay-usecs", &val) == 0)
++		pdata->vref_delay_usecs = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,vref-mv", &val) == 0)
++		pdata->vref_mv = val;
++
++	if (of_get_property(dev->of_node, "ti,keep-vref-on", NULL))
++		pdata->keep_vref_on = true;
++
++	if (of_get_property(dev->of_node, "ti,swap-xy", NULL))
++		pdata->swap_xy = true;
++
++	if (of_property_read_u32(dev->of_node, "ti,settle-delay-usec",
++				 &val) == 0)
++		pdata->settle_delay_usecs = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,penirq-recheck-delay-usecs",
++				 &val) == 0)
++		pdata->penirq_recheck_delay_usecs = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,x-plate-ohms", &val) == 0)
++		pdata->x_plate_ohms = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,y-plate-ohms", &val) == 0)
++		pdata->y_plate_ohms = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,x-min", &val) == 0)
++		pdata->x_min = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,y-min", &val) == 0)
++		pdata->y_min = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,x-max", &val) == 0)
++		pdata->x_max = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,y-max", &val) == 0)
++		pdata->y_max = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,pressure-min", &val) == 0)
++		pdata->pressure_min = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,pressure-max", &val) == 0)
++		pdata->pressure_max = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,debounce-max", &val) == 0)
++		pdata->debounce_max = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,debounce-tol", &val) == 0)
++		pdata->debounce_tol = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,debounce-rep", &val) == 0)
++		pdata->debounce_rep = val;
++
++	if (of_property_read_u32(dev->of_node, "ti,pendown-gpio-debounce",
++				 &val) == 0)
++		pdata->gpio_pendown_debounce = val;
++
++	pdata->gpio_pendown = of_get_named_gpio(dev->of_node, "pendown-gpio", 0);
++
++	if (of_get_property(dev->of_node, "linux,wakeup", NULL))
++		pdata->wakeup = true;
++
++	return pdata;
++}
++#else
++static inline struct ads7846_platform_data ads7846_probe_dt(struct device *dev)
++{
++	return NULL;
++}
++#endif
++
+ static int ads7846_probe(struct spi_device *spi)
+ {
+ 	struct ads7846 *ts;
+ 	struct ads7846_packet *packet;
+ 	struct input_dev *input_dev;
+-	struct ads7846_platform_data *pdata = spi->dev.platform_data;
++	struct ads7846_platform_data *pdata = NULL;
+ 	unsigned long irq_flags;
+ 	int err;
+ 
+@@ -1215,6 +1316,11 @@
+ 		return -ENODEV;
+ 	}
+ 
++	if (spi->dev.platform_data)
++		pdata = spi->dev.platform_data;
++	else
++		pdata = ads7846_probe_dt(&spi->dev);
++
+ 	if (!pdata) {
+ 		dev_dbg(&spi->dev, "no platform data?\n");
+ 		return -ENODEV;
+@@ -1245,21 +1351,29 @@
+ 		goto err_free_mem;
+ 	}
+ 
+-	spi_set_drvdata(spi, ts);
++	dev_set_drvdata(&spi->dev, ts);
+ 
++	ts->pdata = pdata;
+ 	ts->packet = packet;
+ 	ts->spi = spi;
+ 	ts->input = input_dev;
+-	ts->vref_mv = pdata->vref_mv;
+-	ts->swap_xy = pdata->swap_xy;
+ 
+ 	mutex_init(&ts->lock);
+ 	init_waitqueue_head(&ts->wait);
+ 
+-	ts->model = pdata->model ? : 7846;
+-	ts->vref_delay_usecs = pdata->vref_delay_usecs ? : 100;
+-	ts->x_plate_ohms = pdata->x_plate_ohms ? : 400;
+-	ts->pressure_max = pdata->pressure_max ? : ~0;
++	/* pdata fallback defaults */
++
++	if (!pdata->model)
++		pdata->model = 7846;
++
++	if (!pdata->vref_delay_usecs)
++		pdata->vref_delay_usecs = 100;
++
++	if (!pdata->x_plate_ohms)
++		pdata->x_plate_ohms = 400;
++
++	if (!pdata->pressure_max)
++		pdata->pressure_max = ~0;
+ 
+ 	if (pdata->filter != NULL) {
+ 		if (pdata->filter_init != NULL) {
+@@ -1397,7 +1511,7 @@
+ 
+ static int ads7846_remove(struct spi_device *spi)
+ {
+-	struct ads7846 *ts = spi_get_drvdata(spi);
++	struct ads7846 *ts = dev_get_drvdata(&spi->dev);
+ 
+ 	device_init_wakeup(&spi->dev, false);
+ 
+@@ -1437,6 +1551,7 @@
+ 		.name	= "ads7846",
+ 		.owner	= THIS_MODULE,
+ 		.pm	= &ads7846_pm,
++		.of_match_table = of_match_ptr(ads7846_dt_ids),
+ 	},
+ 	.probe		= ads7846_probe,
+ 	.remove		= ads7846_remove,
+diff -ur fsl/drivers/media/pci/Kconfig sk/drivers/media/pci/Kconfig
+--- fsl/drivers/media/pci/Kconfig	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/media/pci/Kconfig	2015-02-18 14:34:17.000000000 +0300
+@@ -12,6 +12,7 @@
+ 	comment "Media capture support"
+ source "drivers/media/pci/meye/Kconfig"
+ source "drivers/media/pci/sta2x11/Kconfig"
++source "drivers/media/pci/tw6869/Kconfig"
+ endif
+ 
+ if MEDIA_ANALOG_TV_SUPPORT
+diff -ur fsl/drivers/media/pci/Makefile sk/drivers/media/pci/Makefile
+--- fsl/drivers/media/pci/Makefile	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/media/pci/Makefile	2015-02-18 14:52:07.000000000 +0300
+@@ -24,3 +24,4 @@
+ obj-$(CONFIG_VIDEO_SAA7164) += saa7164/
+ obj-$(CONFIG_VIDEO_MEYE) += meye/
+ obj-$(CONFIG_STA2X11_VIP) += sta2x11/
++obj-$(CONFIG_VIDEO_TW6869) += tw6869/
+diff -ur fsl/drivers/media/platform/mxc/capture/adv7180.c sk/drivers/media/platform/mxc/capture/adv7180.c
+--- fsl/drivers/media/platform/mxc/capture/adv7180.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/media/platform/mxc/capture/adv7180.c	2014-12-12 20:17:45.000000000 +0300
+@@ -71,6 +71,7 @@
+ struct sensor {
+ 	struct sensor_data sen;
+ 	v4l2_std_id std_id;
++	u32	cam_std;
+ } adv7180_data;
+ 
+ 
+@@ -177,8 +178,10 @@
+ 
+ static inline void adv7180_power_down(int enable)
+ {
+-	gpio_set_value_cansleep(pwn_gpio, !enable);
+-	msleep(2);
++	if (gpio_is_valid(pwn_gpio)) {
++		gpio_set_value_cansleep(pwn_gpio, !enable);
++		msleep(2);
++	}
+ }
+ 
+ static int adv7180_regulator_enable(struct device *dev)
+@@ -317,14 +320,13 @@
+ 	dev_dbg(&adv7180_data.sen.i2c_client->dev, "In adv7180_get_std\n");
+ 
+ 	/* Read the AD_RESULT to get the detect output video standard */
+-	tmp = adv7180_read(ADV7180_STATUS_1) & 0x70;
+-
++	tmp = adv7180_read(ADV7180_INPUT_CTL) & 0xf0;
+ 	mutex_lock(&mutex);
+-	if (tmp == 0x40) {
++	if (tmp == 0x80) {
+ 		/* PAL */
+ 		*std = V4L2_STD_PAL;
+ 		idx = ADV7180_PAL;
+-	} else if (tmp == 0) {
++	} else if ((tmp == 0x40) || (tmp == 0x50)) {
+ 		/*NTSC*/
+ 		*std = V4L2_STD_NTSC;
+ 		idx = ADV7180_NTSC;
+@@ -377,8 +379,8 @@
+ 	memset(p, 0, sizeof(*p));
+ 	p->if_type = V4L2_IF_TYPE_BT656; /* This is the only possibility. */
+ 	p->u.bt656.mode = V4L2_IF_TYPE_BT656_MODE_NOBT_8BIT;
+-	p->u.bt656.nobt_hs_inv = 1;
+-	p->u.bt656.bt_sync_correct = 1;
++//	p->u.bt656.nobt_hs_inv = 1;
++//	p->u.bt656.bt_sync_correct = 1;
+ 
+ 	/* ADV7180 has a dedicated clock so no clock settings needed. */
+ 
+@@ -783,6 +785,30 @@
+ 	return 0;
+ }
+ 
++static int ioctl_s_video_routing(struct v4l2_int_device *s,
++			struct v4l2_routing *route)
++{
++	int timeout = 10;
++
++	/* Set CVBS input on AIN 1-6 */
++	adv7180_write_reg(ADV7180_INPUT_CTL, 
++		adv7180_data.cam_std | route->input);
++	dev_dbg(&adv7180_data.sen.i2c_client->dev, 
++		"AIN%d\n", route->input + 1);
++
++	msleep(1);
++
++	while ((adv7180_read(ADV7180_STATUS_1) & 0x01) == 0) {
++		if (!timeout--) {
++			dev_info(&adv7180_data.sen.i2c_client->dev, 
++				"cannot lock AIN%d\n", route->input + 1);
++			break;
++		}
++		msleep(10);
++	}
++	return 0;
++}
++
+ /*!
+  * ioctl_init - V4L2 sensor interface handler for VIDIOC_INT_INIT
+  * @s: pointer to standard V4L2 device structure
+@@ -857,6 +883,8 @@
+ 				(v4l2_int_ioctl_func *) ioctl_enum_framesizes},
+ 	{vidioc_int_g_chip_ident_num,
+ 				(v4l2_int_ioctl_func *)ioctl_g_chip_ident},
++	{vidioc_int_s_video_routing_num,
++				(v4l2_int_ioctl_func *)ioctl_s_video_routing},
+ };
+ 
+ static struct v4l2_int_slave adv7180_slave = {
+@@ -889,254 +917,37 @@
+ 
+ 	if (cvbs) {
+ 		/* Set CVBS input on AIN1 */
+-		adv7180_write_reg(ADV7180_INPUT_CTL, 0x00);
++		adv7180_write_reg(ADV7180_INPUT_CTL, adv7180_data.cam_std & 0xf0); 
+ 	} else {
+ 		/*
+-		 * Set YPbPr input on AIN1,4,5 and normal
+-		 * operations(autodection of all stds).
++		 * Set YPbPr input on AIN1,4,5
+ 		 */
+-		adv7180_write_reg(ADV7180_INPUT_CTL, 0x09);
++		adv7180_write_reg(ADV7180_INPUT_CTL, adv7180_data.cam_std | 0x09);
+ 	}
+ 
+-	/* Datasheet recommends */
+-	adv7180_write_reg(0x01, 0xc8);
+-	adv7180_write_reg(0x02, 0x04);
+-	adv7180_write_reg(0x03, 0x00);
+-	adv7180_write_reg(0x04, 0x45);
+-	adv7180_write_reg(0x05, 0x00);
+-	adv7180_write_reg(0x06, 0x02);
+-	adv7180_write_reg(0x07, 0x7F);
+-	adv7180_write_reg(0x08, 0x80);
+-	adv7180_write_reg(0x0A, 0x00);
+-	adv7180_write_reg(0x0B, 0x00);
+-	adv7180_write_reg(0x0C, 0x36);
+-	adv7180_write_reg(0x0D, 0x7C);
+-	adv7180_write_reg(0x0E, 0x00);
+-	adv7180_write_reg(0x0F, 0x00);
+-	adv7180_write_reg(0x13, 0x00);
+-	adv7180_write_reg(0x14, 0x12);
+-	adv7180_write_reg(0x15, 0x00);
+-	adv7180_write_reg(0x16, 0x00);
+-	adv7180_write_reg(0x17, 0x01);
+-	adv7180_write_reg(0x18, 0x93);
+-	adv7180_write_reg(0xF1, 0x19);
+-	adv7180_write_reg(0x1A, 0x00);
+-	adv7180_write_reg(0x1B, 0x00);
+-	adv7180_write_reg(0x1C, 0x00);
+-	adv7180_write_reg(0x1D, 0x40);
+-	adv7180_write_reg(0x1E, 0x00);
+-	adv7180_write_reg(0x1F, 0x00);
+-	adv7180_write_reg(0x20, 0x00);
+-	adv7180_write_reg(0x21, 0x00);
+-	adv7180_write_reg(0x22, 0x00);
+-	adv7180_write_reg(0x23, 0xC0);
+-	adv7180_write_reg(0x24, 0x00);
+-	adv7180_write_reg(0x25, 0x00);
+-	adv7180_write_reg(0x26, 0x00);
+-	adv7180_write_reg(0x27, 0x58);
+-	adv7180_write_reg(0x28, 0x00);
+-	adv7180_write_reg(0x29, 0x00);
+-	adv7180_write_reg(0x2A, 0x00);
+-	adv7180_write_reg(0x2B, 0xE1);
+-	adv7180_write_reg(0x2C, 0xAE);
+-	adv7180_write_reg(0x2D, 0xF4);
+-	adv7180_write_reg(0x2E, 0x00);
+-	adv7180_write_reg(0x2F, 0xF0);
+-	adv7180_write_reg(0x30, 0x00);
+-	adv7180_write_reg(0x31, 0x12);
+-	adv7180_write_reg(0x32, 0x41);
+-	adv7180_write_reg(0x33, 0x84);
+-	adv7180_write_reg(0x34, 0x00);
+-	adv7180_write_reg(0x35, 0x02);
+-	adv7180_write_reg(0x36, 0x00);
+-	adv7180_write_reg(0x37, 0x01);
+-	adv7180_write_reg(0x38, 0x80);
+-	adv7180_write_reg(0x39, 0xC0);
+-	adv7180_write_reg(0x3A, 0x10);
+-	adv7180_write_reg(0x3B, 0x05);
+-	adv7180_write_reg(0x3C, 0x58);
+-	adv7180_write_reg(0x3D, 0xB2);
+-	adv7180_write_reg(0x3E, 0x64);
+-	adv7180_write_reg(0x3F, 0xE4);
+-	adv7180_write_reg(0x40, 0x90);
+-	adv7180_write_reg(0x41, 0x01);
+-	adv7180_write_reg(0x42, 0x7E);
+-	adv7180_write_reg(0x43, 0xA4);
+-	adv7180_write_reg(0x44, 0xFF);
+-	adv7180_write_reg(0x45, 0xB6);
+-	adv7180_write_reg(0x46, 0x12);
+-	adv7180_write_reg(0x48, 0x00);
+-	adv7180_write_reg(0x49, 0x00);
+-	adv7180_write_reg(0x4A, 0x00);
+-	adv7180_write_reg(0x4B, 0x00);
+-	adv7180_write_reg(0x4C, 0x00);
+-	adv7180_write_reg(0x4D, 0xEF);
+-	adv7180_write_reg(0x4E, 0x08);
+-	adv7180_write_reg(0x4F, 0x08);
+-	adv7180_write_reg(0x50, 0x08);
+-	adv7180_write_reg(0x51, 0x24);
+-	adv7180_write_reg(0x52, 0x0B);
+-	adv7180_write_reg(0x53, 0x4E);
+-	adv7180_write_reg(0x54, 0x80);
+-	adv7180_write_reg(0x55, 0x00);
+-	adv7180_write_reg(0x56, 0x10);
+-	adv7180_write_reg(0x57, 0x00);
+-	adv7180_write_reg(0x58, 0x00);
+-	adv7180_write_reg(0x59, 0x00);
+-	adv7180_write_reg(0x5A, 0x00);
+-	adv7180_write_reg(0x5B, 0x00);
+-	adv7180_write_reg(0x5C, 0x00);
+-	adv7180_write_reg(0x5D, 0x00);
+-	adv7180_write_reg(0x5E, 0x00);
+-	adv7180_write_reg(0x5F, 0x00);
+-	adv7180_write_reg(0x60, 0x00);
+-	adv7180_write_reg(0x61, 0x00);
+-	adv7180_write_reg(0x62, 0x20);
+-	adv7180_write_reg(0x63, 0x00);
+-	adv7180_write_reg(0x64, 0x00);
+-	adv7180_write_reg(0x65, 0x00);
+-	adv7180_write_reg(0x66, 0x00);
+-	adv7180_write_reg(0x67, 0x03);
+-	adv7180_write_reg(0x68, 0x01);
+-	adv7180_write_reg(0x69, 0x00);
+-	adv7180_write_reg(0x6A, 0x00);
+-	adv7180_write_reg(0x6B, 0xC0);
+-	adv7180_write_reg(0x6C, 0x00);
+-	adv7180_write_reg(0x6D, 0x00);
+-	adv7180_write_reg(0x6E, 0x00);
+-	adv7180_write_reg(0x6F, 0x00);
+-	adv7180_write_reg(0x70, 0x00);
+-	adv7180_write_reg(0x71, 0x00);
+-	adv7180_write_reg(0x72, 0x00);
+-	adv7180_write_reg(0x73, 0x10);
+-	adv7180_write_reg(0x74, 0x04);
+-	adv7180_write_reg(0x75, 0x01);
+-	adv7180_write_reg(0x76, 0x00);
+-	adv7180_write_reg(0x77, 0x3F);
+-	adv7180_write_reg(0x78, 0xFF);
+-	adv7180_write_reg(0x79, 0xFF);
+-	adv7180_write_reg(0x7A, 0xFF);
+-	adv7180_write_reg(0x7B, 0x1E);
+-	adv7180_write_reg(0x7C, 0xC0);
+-	adv7180_write_reg(0x7D, 0x00);
+-	adv7180_write_reg(0x7E, 0x00);
+-	adv7180_write_reg(0x7F, 0x00);
+-	adv7180_write_reg(0x80, 0x00);
+-	adv7180_write_reg(0x81, 0xC0);
+-	adv7180_write_reg(0x82, 0x04);
+-	adv7180_write_reg(0x83, 0x00);
+-	adv7180_write_reg(0x84, 0x0C);
+-	adv7180_write_reg(0x85, 0x02);
+-	adv7180_write_reg(0x86, 0x03);
+-	adv7180_write_reg(0x87, 0x63);
+-	adv7180_write_reg(0x88, 0x5A);
+-	adv7180_write_reg(0x89, 0x08);
+-	adv7180_write_reg(0x8A, 0x10);
+-	adv7180_write_reg(0x8B, 0x00);
+-	adv7180_write_reg(0x8C, 0x40);
+-	adv7180_write_reg(0x8D, 0x00);
+-	adv7180_write_reg(0x8E, 0x40);
+-	adv7180_write_reg(0x8F, 0x00);
+-	adv7180_write_reg(0x90, 0x00);
+-	adv7180_write_reg(0x91, 0x50);
+-	adv7180_write_reg(0x92, 0x00);
+-	adv7180_write_reg(0x93, 0x00);
+-	adv7180_write_reg(0x94, 0x00);
+-	adv7180_write_reg(0x95, 0x00);
+-	adv7180_write_reg(0x96, 0x00);
+-	adv7180_write_reg(0x97, 0xF0);
+-	adv7180_write_reg(0x98, 0x00);
+-	adv7180_write_reg(0x99, 0x00);
+-	adv7180_write_reg(0x9A, 0x00);
+-	adv7180_write_reg(0x9B, 0x00);
+-	adv7180_write_reg(0x9C, 0x00);
+-	adv7180_write_reg(0x9D, 0x00);
+-	adv7180_write_reg(0x9E, 0x00);
+-	adv7180_write_reg(0x9F, 0x00);
+-	adv7180_write_reg(0xA0, 0x00);
+-	adv7180_write_reg(0xA1, 0x00);
+-	adv7180_write_reg(0xA2, 0x00);
+-	adv7180_write_reg(0xA3, 0x00);
+-	adv7180_write_reg(0xA4, 0x00);
+-	adv7180_write_reg(0xA5, 0x00);
+-	adv7180_write_reg(0xA6, 0x00);
+-	adv7180_write_reg(0xA7, 0x00);
+-	adv7180_write_reg(0xA8, 0x00);
+-	adv7180_write_reg(0xA9, 0x00);
+-	adv7180_write_reg(0xAA, 0x00);
+-	adv7180_write_reg(0xAB, 0x00);
+-	adv7180_write_reg(0xAC, 0x00);
+-	adv7180_write_reg(0xAD, 0x00);
+-	adv7180_write_reg(0xAE, 0x60);
+-	adv7180_write_reg(0xAF, 0x00);
+-	adv7180_write_reg(0xB0, 0x00);
+-	adv7180_write_reg(0xB1, 0x60);
+-	adv7180_write_reg(0xB2, 0x1C);
+-	adv7180_write_reg(0xB3, 0x54);
+-	adv7180_write_reg(0xB4, 0x00);
+-	adv7180_write_reg(0xB5, 0x00);
+-	adv7180_write_reg(0xB6, 0x00);
+-	adv7180_write_reg(0xB7, 0x13);
+-	adv7180_write_reg(0xB8, 0x03);
+-	adv7180_write_reg(0xB9, 0x33);
+-	adv7180_write_reg(0xBF, 0x02);
+-	adv7180_write_reg(0xC0, 0x00);
+-	adv7180_write_reg(0xC1, 0x00);
+-	adv7180_write_reg(0xC2, 0x00);
+-	adv7180_write_reg(0xC3, 0x00);
+-	adv7180_write_reg(0xC4, 0x00);
+-	adv7180_write_reg(0xC5, 0x81);
+-	adv7180_write_reg(0xC6, 0x00);
+-	adv7180_write_reg(0xC7, 0x00);
+-	adv7180_write_reg(0xC8, 0x00);
+-	adv7180_write_reg(0xC9, 0x04);
+-	adv7180_write_reg(0xCC, 0x69);
+-	adv7180_write_reg(0xCD, 0x00);
+-	adv7180_write_reg(0xCE, 0x01);
+-	adv7180_write_reg(0xCF, 0xB4);
+-	adv7180_write_reg(0xD0, 0x00);
+-	adv7180_write_reg(0xD1, 0x10);
+-	adv7180_write_reg(0xD2, 0xFF);
+-	adv7180_write_reg(0xD3, 0xFF);
+-	adv7180_write_reg(0xD4, 0x7F);
+-	adv7180_write_reg(0xD5, 0x7F);
+-	adv7180_write_reg(0xD6, 0x3E);
+-	adv7180_write_reg(0xD7, 0x08);
+-	adv7180_write_reg(0xD8, 0x3C);
+-	adv7180_write_reg(0xD9, 0x08);
+-	adv7180_write_reg(0xDA, 0x3C);
+-	adv7180_write_reg(0xDB, 0x9B);
+-	adv7180_write_reg(0xDC, 0xAC);
+-	adv7180_write_reg(0xDD, 0x4C);
+-	adv7180_write_reg(0xDE, 0x00);
+-	adv7180_write_reg(0xDF, 0x00);
+-	adv7180_write_reg(0xE0, 0x14);
+-	adv7180_write_reg(0xE1, 0x80);
+-	adv7180_write_reg(0xE2, 0x80);
+-	adv7180_write_reg(0xE3, 0x80);
+-	adv7180_write_reg(0xE4, 0x80);
+-	adv7180_write_reg(0xE5, 0x25);
+-	adv7180_write_reg(0xE6, 0x44);
+-	adv7180_write_reg(0xE7, 0x63);
+-	adv7180_write_reg(0xE8, 0x65);
+-	adv7180_write_reg(0xE9, 0x14);
+-	adv7180_write_reg(0xEA, 0x63);
+-	adv7180_write_reg(0xEB, 0x55);
+-	adv7180_write_reg(0xEC, 0x55);
+-	adv7180_write_reg(0xEE, 0x00);
+-	adv7180_write_reg(0xEF, 0x4A);
+-	adv7180_write_reg(0xF0, 0x44);
+-	adv7180_write_reg(0xF1, 0x0C);
+-	adv7180_write_reg(0xF2, 0x32);
+-	adv7180_write_reg(0xF3, 0x00);
+-	adv7180_write_reg(0xF4, 0x3F);
+-	adv7180_write_reg(0xF5, 0xE0);
+-	adv7180_write_reg(0xF6, 0x69);
+-	adv7180_write_reg(0xF7, 0x10);
+-	adv7180_write_reg(0xF8, 0x00);
+-	adv7180_write_reg(0xF9, 0x03);
+-	adv7180_write_reg(0xFA, 0xFA);
+-	adv7180_write_reg(0xFB, 0x40);
++	adv7180_write_reg(0x0F, 0x40); /* TRAQ */
++	adv7180_write_reg(0x01, 0x80); /* disable Hsync pll, Vsync processor */
++	adv7180_write_reg(0x19, 0xB1); /* Mv robustnesss bit */
++	adv7180_write_reg(0x2C, 0x12); /* Use sync based AGC */
++	adv7180_write_reg(0x31, 0x02); /* Clears NEWAV_MODE  AV_MODE,SAV/EAV to suit ADV encoders */
++	adv7180_write_reg(0x37, 0x81); /* HS polarity */
++	adv7180_write_reg(0x51, 0x89); /* FSCLE enabled, CIL,COL */
++	adv7180_write_reg(0x3A, 0x16); /* Power down U and V ADC's */
++	adv7180_write_reg(0x3D, 0xA2); /* MWE Enable Manual Window, Colour Kill Threshold to 2 */
++	adv7180_write_reg(0x3E, 0x6A); /* BLM optimisation */
++	adv7180_write_reg(0x3F, 0xA0); /* BGB */
++	adv7180_write_reg(0x51, 0x9B); /* ADI Recommended Write */
++	adv7180_write_reg(0x0E, 0x85); /* ADI Recommended Write */
++	adv7180_write_reg(0xB6, 0x0C); /* manual enables for agc & clamp loop speeds */
++	adv7180_write_reg(0xBE, 0xC0); /* speed of digital agc loop */
++	adv7180_write_reg(0xC0, 0xC0); /* speed of digital clamp loop */
++	adv7180_write_reg(0xD1, 0xB9); /* Disable always flip field ID bit, Disable VCR FIELD filtering for switching application */
++	adv7180_write_reg(0xD6, 0x6D); /* ADI Recommended Write */
++	adv7180_write_reg(0xD9, 0x44); /* Toggle LSF set to zero */
++	adv7180_write_reg(0x0E, 0x80); /* ADI Recommended Write */
++	adv7180_write_reg(0x55, 0x81); /* ADI Recommended Write */
++	adv7180_write_reg(0x0E, 0x00); /* ADI Recommended Write */
++	adv7180_write_reg(0xF4, 0x3F); /* High drive strength (4×) */
+ }
+ 
+ /*! ADV7180 I2C attach function.
+@@ -1160,6 +971,7 @@
+ {
+ 	int rev_id;
+ 	int ret = 0;
++	u32 cam_std = 0; /* PAL */
+ 	u32 cvbs = true;
+ 	struct pinctrl *pinctrl;
+ 	struct device *dev = &client->dev;
+@@ -1175,15 +987,13 @@
+ 
+ 	/* request power down pin */
+ 	pwn_gpio = of_get_named_gpio(dev->of_node, "pwn-gpios", 0);
+-	if (!gpio_is_valid(pwn_gpio)) {
+-		dev_err(dev, "no sensor pwdn pin available\n");
+-		return -ENODEV;
+-	}
+-	ret = devm_gpio_request_one(dev, pwn_gpio, GPIOF_OUT_INIT_HIGH,
++	if (gpio_is_valid(pwn_gpio)) {
++		ret = devm_gpio_request_one(dev, pwn_gpio, GPIOF_OUT_INIT_HIGH,
+ 					"adv7180_pwdn");
+-	if (ret < 0) {
+-		dev_err(dev, "no power pin available!\n");
+-		return ret;
++		if (ret < 0) {
++			dev_err(dev, "request power down pin\n");
++			return ret;
++		}
+ 	}
+ 
+ 	adv7180_regulator_enable(dev);
+@@ -1194,11 +1004,36 @@
+ 
+ 	/* Set initial values for the sensor struct. */
+ 	memset(&adv7180_data, 0, sizeof(adv7180_data));
++
++	ret = of_property_read_u32(dev->of_node, "cam_std", &cam_std);
++	if (ret) {
++		dev_err(dev, "cam_std setting is not found, cam_std = 0 (PAL)\n");
++		cam_std = 0;
++	}
++
++	switch (cam_std) {
++	case 1:
++		/* NTSC J */
++		adv7180_data.std_id = V4L2_STD_NTSC;
++		adv7180_data.cam_std = 0x40;
++		video_idx = ADV7180_NTSC;
++		break;
++	case 2:
++		/* NTSC M */
++		adv7180_data.std_id = V4L2_STD_NTSC;
++		adv7180_data.cam_std = 0x50;
++		video_idx = ADV7180_NTSC;
++		break;
++	default:
++		/* PAL */
++		adv7180_data.std_id = V4L2_STD_PAL;
++		adv7180_data.cam_std = 0x80;
++		video_idx = ADV7180_PAL;
++	}
++
+ 	adv7180_data.sen.i2c_client = client;
+ 	adv7180_data.sen.streamcap.timeperframe.denominator = 30;
+ 	adv7180_data.sen.streamcap.timeperframe.numerator = 1;
+-	adv7180_data.std_id = V4L2_STD_ALL;
+-	video_idx = ADV7180_NOT_LOCKED;
+ 	adv7180_data.sen.pix.width = video_fmts[video_idx].raw_width;
+ 	adv7180_data.sen.pix.height = video_fmts[video_idx].raw_height;
+ 	adv7180_data.sen.pix.pixelformat = V4L2_PIX_FMT_UYVY;  /* YUV422 */
+diff -ur fsl/drivers/media/platform/mxc/capture/Makefile sk/drivers/media/platform/mxc/capture/Makefile
+--- fsl/drivers/media/platform/mxc/capture/Makefile	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/media/platform/mxc/capture/Makefile	2014-10-24 21:56:06.000000000 +0400
+@@ -1,6 +1,7 @@
+ obj-$(CONFIG_VIDEO_MXC_CSI_CAMERA)	+= fsl_csi.o csi_v4l2_capture.o
+ 
+ ifeq ($(CONFIG_VIDEO_MXC_IPU_CAMERA),y)
++#	CFLAGS_mxc_v4l2_capture.o := -DDEBUG
+ 	obj-$(CONFIG_VIDEO_MXC_CAPTURE) += mxc_v4l2_capture.o
+ 	obj-$(CONFIG_MXC_IPU_PRP_VF_SDC) += ipu_prp_vf_sdc.o ipu_prp_vf_sdc_bg.o
+ 	obj-$(CONFIG_MXC_IPU_DEVICE_QUEUE_SDC) += ipu_fg_overlay_sdc.o ipu_bg_overlay_sdc.o
+diff -ur fsl/drivers/media/platform/mxc/capture/mxc_v4l2_capture.c sk/drivers/media/platform/mxc/capture/mxc_v4l2_capture.c
+--- fsl/drivers/media/platform/mxc/capture/mxc_v4l2_capture.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/media/platform/mxc/capture/mxc_v4l2_capture.c	2014-10-24 21:56:06.000000000 +0400
+@@ -44,6 +44,7 @@
+ #include "ipu_prp_sw.h"
+ 
+ #define init_MUTEX(sem)         sema_init(sem, 1)
++#define ADV7180_NUM_AINS		6
+ 
+ static struct platform_device_id imx_v4l2_devtype[] = {
+ 	{
+@@ -124,7 +125,7 @@
+ 	 },
+ };
+ 
+-static struct v4l2_input mxc_capture_inputs[MXC_V4L2_CAPTURE_NUM_INPUTS] = {
++static struct v4l2_input mxc_capture_inputs[MXC_V4L2_CAPTURE_NUM_INPUTS + 6] = {
+ 	{
+ 	 .index = 0,
+ 	 .name = "CSI IC MEM",
+@@ -424,6 +425,13 @@
+ 			"queued yet\n");
+ 		return -EINVAL;
+ 	}
++
++	if (cam->ain != 0) {
++		cam->capture_pid = current->pid;
++		cam->capture_on = true;
++		return 0;
++	}
++	
+ 	if (cam->enc_update_eba &&
+ 		cam->ready_q.prev == cam->ready_q.next) {
+ 		pr_err("ERROR: v4l2 capture: mxc_streamon buffer need "
+@@ -453,14 +461,18 @@
+ 		frame->ipu_buf_num = cam->ping_pong_csi;
+ 		err = cam->enc_update_eba(cam->ipu, frame->buffer.m.offset,
+ 					  &cam->ping_pong_csi);
+-
+-		frame =
+-		    list_entry(cam->ready_q.next, struct mxc_v4l_frame, queue);
+-		list_del(cam->ready_q.next);
+-		list_add_tail(&frame->queue, &cam->working_q);
+-		frame->ipu_buf_num = cam->ping_pong_csi;
+-		err |= cam->enc_update_eba(cam->ipu, frame->buffer.m.offset,
++		if (cam->ain_num == 1) {
++			frame =
++				list_entry(cam->ready_q.next, struct mxc_v4l_frame, queue);
++			list_del(cam->ready_q.next);
++			list_add_tail(&frame->queue, &cam->working_q);
++			frame->ipu_buf_num = cam->ping_pong_csi;
++			err |= cam->enc_update_eba(cam->ipu, frame->buffer.m.offset,
+ 					   &cam->ping_pong_csi);
++		} else 
++			cam->enc_update_eba(cam->ipu,
++					cam->dummy_frame.buffer.m.offset,
++					&cam->ping_pong_csi);
+ 		spin_unlock_irqrestore(&cam->queue_int_lock, lock_flags);
+ 	} else {
+ 		spin_unlock_irqrestore(&cam->queue_int_lock, lock_flags);
+@@ -503,7 +515,8 @@
+ 	 * 3. disable idmac
+ 	 * 4. disable smfc (CSI--MEM channel)
+ 	 */
+-	if (mxc_capture_inputs[cam->current_input].name != NULL) {
++	if ((mxc_capture_inputs[cam->current_input].name != NULL) && 
++		(cam->ain == 0)) {
+ 		if (cam->enc_disable_csi) {
+ 			err = cam->enc_disable_csi(cam);
+ 			if (err != 0)
+@@ -1514,13 +1527,13 @@
+ 	struct mxc_v4l_frame *frame;
+ 	unsigned long lock_flags;
+ 
+-	pr_debug("In MVC:mxc_v4l_dqueue\n");
++	pr_debug("In MVC:mxc_v4l_dqueue cam = 0x%x\n", (u32)cam);
+ 
+ 	if (!wait_event_interruptible_timeout(cam->enc_queue,
+ 					      cam->enc_counter != 0, 10 * HZ)) {
+ 		pr_err("ERROR: v4l2 capture: mxc_v4l_dqueue timeout "
+-			"enc_counter %x\n",
+-		       cam->enc_counter);
++			"enc_counter %x  cam = 0x%x\n",
++		       cam->enc_counter, (u32)cam);
+ 		return -ETIME;
+ 	} else if (signal_pending(current)) {
+ 		pr_err("ERROR: v4l2 capture: mxc_v4l_dqueue() "
+@@ -1583,7 +1596,7 @@
+ 	struct sensor_data *sensor;
+ 
+ 	pr_debug("\nIn MVC: mxc_v4l_open\n");
+-	pr_debug("   device name is %s\n", dev->name);
++	pr_debug("   device name is %s cam = 0x%x\n", dev->name, (u32)cam);
+ 
+ 	if (!cam) {
+ 		pr_err("ERROR: v4l2 capture: Internal error, "
+@@ -1612,8 +1625,8 @@
+ 		wait_event_interruptible(cam->power_queue,
+ 					 cam->low_power == false);
+ 
+-		if (strcmp(mxc_capture_inputs[cam->current_input].name,
+-			   "CSI MEM") == 0) {
++		if ((strcmp(mxc_capture_inputs[cam->current_input].name,
++			   "CSI MEM") == 0) && (cam->ain == 0)) {
+ #if defined(CONFIG_MXC_IPU_CSI_ENC) || defined(CONFIG_MXC_IPU_CSI_ENC_MODULE)
+ 			err = csi_enc_select(cam);
+ #endif
+@@ -1625,6 +1638,7 @@
+ 		}
+ 
+ 		cam->enc_counter = 0;
++		cam->ain_active = 0;
+ 		INIT_LIST_HEAD(&cam->ready_q);
+ 		INIT_LIST_HEAD(&cam->working_q);
+ 		INIT_LIST_HEAD(&cam->done_q);
+@@ -1695,20 +1709,23 @@
+ 		csi_param.data_fmt = cam_fmt.fmt.pix.pixelformat;
+ 		pr_debug("On Open: Input to ipu size is %d x %d\n",
+ 				cam_fmt.fmt.pix.width, cam_fmt.fmt.pix.height);
+-		ipu_csi_set_window_size(cam->ipu, cam->crop_current.width,
++
++		if (cam->ain == 0) {
++			ipu_csi_set_window_size(cam->ipu, cam->crop_current.width,
+ 					cam->crop_current.height,
+ 					cam->csi);
+-		ipu_csi_set_window_pos(cam->ipu, cam->crop_current.left,
++			ipu_csi_set_window_pos(cam->ipu, cam->crop_current.left,
+ 					cam->crop_current.top,
+ 					cam->csi);
+-		ipu_csi_init_interface(cam->ipu, cam->crop_bounds.width,
++			ipu_csi_init_interface(cam->ipu, cam->crop_bounds.width,
+ 					cam->crop_bounds.height,
+ 					cam_fmt.fmt.pix.pixelformat,
+ 					csi_param);
+-		clk_prepare_enable(sensor->sensor_clk);
+-		vidioc_int_s_power(cam->sensor, 1);
+-		vidioc_int_init(cam->sensor);
+-		vidioc_int_dev_init(cam->sensor);
++			clk_prepare_enable(sensor->sensor_clk);
++			vidioc_int_s_power(cam->sensor, 1);
++			vidioc_int_init(cam->sensor);
++			vidioc_int_dev_init(cam->sensor);
++		}
+ 	}
+ 
+ 	file->private_data = dev;
+@@ -1753,7 +1770,7 @@
+ 	down(&cam->busy_lock);
+ 
+ 	/* for the case somebody hit the ctrl C */
+-	if (cam->overlay_pid == current->pid && cam->overlay_on) {
++	if ((cam->overlay_pid == current->pid && cam->overlay_on) && (cam->ain == 0)) {
+ 		err = stop_preview(cam);
+ 		cam->overlay_on = false;
+ 	}
+@@ -1763,14 +1780,16 @@
+ 	}
+ 
+ 	if (--cam->open_count == 0) {
+-		vidioc_int_s_power(cam->sensor, 0);
+-		clk_disable_unprepare(sensor->sensor_clk);
++		if (cam->ain == 0) {
++			vidioc_int_s_power(cam->sensor, 0);
++			clk_disable_unprepare(sensor->sensor_clk);
++		}
+ 		wait_event_interruptible(cam->power_queue,
+ 					 cam->low_power == false);
+ 		pr_debug("mxc_v4l_close: release resource\n");
+ 
+-		if (strcmp(mxc_capture_inputs[cam->current_input].name,
+-			   "CSI MEM") == 0) {
++		if ((strcmp(mxc_capture_inputs[cam->current_input].name,
++			   "CSI MEM") == 0)  && (cam->ain == 0)) {
+ #if defined(CONFIG_MXC_IPU_CSI_ENC) || defined(CONFIG_MXC_IPU_CSI_ENC_MODULE)
+ 			err |= csi_enc_deselect(cam);
+ #endif
+@@ -2169,12 +2188,14 @@
+ 		pr_debug("   Cropping Input to ipu size %d x %d\n",
+ 				cam->crop_current.width,
+ 				cam->crop_current.height);
+-		ipu_csi_set_window_size(cam->ipu, cam->crop_current.width,
++		if (cam->ain == 0) {
++			ipu_csi_set_window_size(cam->ipu, cam->crop_current.width,
+ 					cam->crop_current.height,
+ 					cam->csi);
+-		ipu_csi_set_window_pos(cam->ipu, cam->crop_current.left,
++			ipu_csi_set_window_pos(cam->ipu, cam->crop_current.left,
+ 				       cam->crop_current.top,
+ 				       cam->csi);
++		}
+ 		break;
+ 	}
+ 
+@@ -2233,7 +2254,7 @@
+ 		struct v4l2_streamparm *parm = arg;
+ 		pr_debug("   case VIDIOC_S_PARM\n");
+ 		if (cam->sensor)
+-			retval = mxc_v4l2_s_param(cam, parm);
++			retval = (cam->ain == 0) ? mxc_v4l2_s_param(cam, parm) : 0;
+ 		else {
+ 			pr_err("ERROR: v4l2 capture: slave not found!\n");
+ 			retval = -ENODEV;
+@@ -2301,11 +2322,14 @@
+ 	case VIDIOC_ENUMINPUT: {
+ 		struct v4l2_input *input = arg;
+ 		pr_debug("   case VIDIOC_ENUMINPUT\n");
+-		if (input->index >= MXC_V4L2_CAPTURE_NUM_INPUTS) {
++		if (input->index >= (MXC_V4L2_CAPTURE_NUM_INPUTS + ADV7180_NUM_AINS)) {
+ 			retval = -EINVAL;
+ 			break;
+ 		}
+-		*input = mxc_capture_inputs[input->index];
++		if (input->index >= MXC_V4L2_CAPTURE_NUM_INPUTS)
++			*input = mxc_capture_inputs[cam->current_input];
++		else
++			*input = mxc_capture_inputs[input->index];
+ 		break;
+ 	}
+ 
+@@ -2320,7 +2344,16 @@
+ 		int *index = arg;
+ 		pr_debug("   case VIDIOC_S_INPUT\n");
+ 		if (*index >= MXC_V4L2_CAPTURE_NUM_INPUTS) {
+-			retval = -EINVAL;
++			if (*index < (MXC_V4L2_CAPTURE_NUM_INPUTS + ADV7180_NUM_AINS)
++					&& (cam->ain_num == 1)) {
++				unsigned long flags;
++				
++				spin_lock_irqsave(&cam->dqueue_int_lock, flags);
++				cam->ain_active = *index - MXC_V4L2_CAPTURE_NUM_INPUTS;
++				cam->ain_switch_req = 1;
++				spin_unlock_irqrestore(&cam->dqueue_int_lock, flags);
++			} else 
++				retval = -EINVAL;
+ 			break;
+ 		}
+ 
+@@ -2336,7 +2369,8 @@
+ 							V4L2_IN_ST_NO_POWER;
+ 		}
+ 
+-		if (strcmp(mxc_capture_inputs[*index].name, "CSI MEM") == 0) {
++		if ((strcmp(mxc_capture_inputs[*index].name, "CSI MEM") == 0) &&
++			(cam->ain == 0)) {
+ #if defined(CONFIG_MXC_IPU_CSI_ENC) || defined(CONFIG_MXC_IPU_CSI_ENC_MODULE)
+ 			retval = csi_enc_select(cam);
+ 			if (retval)
+@@ -2474,7 +2508,7 @@
+ 	wait_queue_head_t *queue = NULL;
+ 	int res = POLLIN | POLLRDNORM;
+ 
+-	pr_debug("In MVC:mxc_poll\n");
++	pr_debug("In MVC:mxc_poll cam = 0x%x\n", (u32)cam);
+ 
+ 	if (down_interruptible(&cam->busy_lock))
+ 		return -EINTR;
+@@ -2536,6 +2570,13 @@
+ 
+ 	spin_lock(&cam->queue_int_lock);
+ 	spin_lock(&cam->dqueue_int_lock);
++
++	if (cam->ain_switch_req) {
++		quick_disable_csi(cam->ipu, cam->csi);
++		schedule_work(&cam->ain_switch_work);
++		cam->ain_switch_req = 0;
++	}
++
+ 	if (!list_empty(&cam->working_q)) {
+ 		do_gettimeofday(&cur_time);
+ 
+@@ -2543,8 +2584,10 @@
+ 					struct mxc_v4l_frame,
+ 					queue);
+ 
+-		if (done_frame->ipu_buf_num != cam->local_buf_num)
++		if (done_frame->ipu_buf_num != cam->local_buf_num) {
++			printk("SK: ipu != local\n");
+ 			goto next;
++		}
+ 
+ 		/*
+ 		 * Set the current time to done frame buffer's
+@@ -2597,6 +2640,104 @@
+ 	return;
+ }
+ 
++static void ain_switch(struct work_struct *work)
++{
++	cam_data *cam = container_of(work, cam_data, ain_switch_work);
++	struct v4l2_routing route;
++
++	route.input = cam->ain_active;
++	vidioc_int_s_video_routing(cam->sensor, &route);
++	quick_enable_csi(cam->ipu, cam->csi);
++}
++
++static void camera_callback_multi_ain(u32 mask, void *dev)
++{
++	struct mxc_v4l_frame *done_frame;
++	struct mxc_v4l_frame *ready_frame;
++	struct timeval cur_time;
++	cam_data *cam;
++
++	cam_data *cam_pool = (cam_data *) dev;
++	if (cam_pool == NULL)
++		return;
++
++	cam = &cam_pool[cam_pool->ain_active];
++
++	pr_debug("In MVC:camera_callback cam = 0x%x\n", (u32)cam);
++
++	if (cam_pool->ping_pong_csi == 0) {
++		quick_disable_csi(cam_pool->ipu, cam_pool->csi);
++		
++		if (!list_empty(&cam->working_q)) {
++			do_gettimeofday(&cur_time);
++
++			done_frame = list_entry(cam->working_q.next,
++					struct mxc_v4l_frame,
++					queue);
++			/*
++			 * Set the current time to done frame buffer's
++			 * timestamp. Users can use this information to judge
++			 * the frame's usage.
++			 */
++			done_frame->buffer.timestamp = cur_time;
++
++			if (done_frame->buffer.flags & V4L2_BUF_FLAG_QUEUED) {
++				done_frame->buffer.flags |= V4L2_BUF_FLAG_DONE;
++				done_frame->buffer.flags &= ~V4L2_BUF_FLAG_QUEUED;
++
++				spin_lock(&cam->queue_int_lock);
++				spin_lock(&cam->dqueue_int_lock);
++
++				/* Added to the done queue */
++				list_del(cam->working_q.next);
++				list_add_tail(&done_frame->queue, &cam->done_q);
++
++				spin_unlock(&cam->dqueue_int_lock);
++				spin_unlock(&cam->queue_int_lock);
++
++				/* Wake up the queue */
++				cam->enc_counter++;
++				wake_up_interruptible(&cam->enc_queue);
++			} else
++				pr_err("ERROR: v4l2 capture: camera_callback: "
++						"buffer not queued\n");
++		}
++
++		/* next ain */		
++		if (++cam_pool->ain_active == cam_pool->ain_num)
++				cam_pool->ain_active = 0;
++		cam = &cam_pool[cam_pool->ain_active];		
++
++		spin_lock(&cam->queue_int_lock);
++		spin_lock(&cam->dqueue_int_lock);
++
++		if (!list_empty(&cam->ready_q)) {
++				ready_frame = list_entry(cam->ready_q.next,
++				struct mxc_v4l_frame,
++				queue);
++			if (cam_pool->enc_update_eba(cam_pool->ipu,
++					ready_frame->buffer.m.offset,
++					&cam_pool->ping_pong_csi) == 0) {
++				list_del(cam->ready_q.next);
++				list_add_tail(&ready_frame->queue, &cam->working_q);
++			}
++		} else {
++			cam_pool->enc_update_eba(cam_pool->ipu,
++					cam_pool->dummy_frame.buffer.m.offset,
++					&cam_pool->ping_pong_csi);
++		}
++
++		spin_unlock(&cam->dqueue_int_lock);
++		spin_unlock(&cam->queue_int_lock);
++
++		schedule_work(&cam_pool->ain_switch_work);
++	} else {
++		cam_pool->enc_update_eba(cam_pool->ipu,
++				cam_pool->dummy_frame.buffer.m.offset,
++				&cam_pool->ping_pong_csi);
++	}
++}
++
+ /*!
+  * initialize cam_data structure
+  *
+@@ -2604,12 +2745,13 @@
+  *
+  * @return status  0 Success
+  */
+-static int init_camera_struct(cam_data *cam, struct platform_device *pdev)
++static cam_data * init_camera_struct(struct platform_device *pdev)
+ {
+ 	const struct of_device_id *of_id =
+ 			of_match_device(mxc_v4l2_dt_ids, &pdev->dev);
+ 	struct device_node *np = pdev->dev.of_node;
+-	int ipu_id, csi_id, mclk_source;
++	int ipu_id, csi_id, mclk_source, ain_num, ain;
++	cam_data *cam_pool = NULL;
+ 	int ret = 0;
+ 
+ 	pr_debug("In MVC: init_camera_struct\n");
+@@ -2617,23 +2759,41 @@
+ 	ret = of_property_read_u32(np, "ipu_id", &ipu_id);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "ipu_id missing or invalid\n");
+-		return ret;
++		return cam_pool;
+ 	}
+ 
+ 	ret = of_property_read_u32(np, "csi_id", &csi_id);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "csi_id missing or invalid\n");
+-		return ret;
++		return cam_pool;
+ 	}
+ 
+ 	ret = of_property_read_u32(np, "mclk_source", &mclk_source);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "sensor mclk missing or invalid\n");
+-		return ret;
++		return cam_pool;
++	}
++
++	ret = of_property_read_u32(np, "ain_num", &ain_num);
++	if (ret) {
++		dev_info(&pdev->dev, "ain_num missing, ain_num = 1\n");
++		ain_num = 1;
++	}
++
++	if (ain_num < 1 || ain_num > 6) {
++		dev_info(&pdev->dev, "wrong value ain_num = %d, ain_num = 1\n", ain_num);
++		ain_num = 1;
++	}
++
++	/* Create cam and initialize it. */
++	cam_pool = kmalloc(ain_num * sizeof(cam_data), GFP_KERNEL);
++	if (cam_pool == NULL) {
++		pr_err("ERROR: v4l2 capture: failed to register camera\n");
++		return cam_pool;
+ 	}
+ 
+ 	/* Default everything to 0 */
+-	memset(cam, 0, sizeof(cam_data));
++	memset(cam_pool, 0, ain_num * sizeof(cam_data));
+ 
+ 	/* get devtype to distinguish if the cpu is imx5 or imx6
+ 	 * IMX5_V4L2 specify the cpu is imx5
+@@ -2641,85 +2801,99 @@
+ 	 */
+ 	if (of_id)
+ 		pdev->id_entry = of_id->data;
+-	cam->devtype = pdev->id_entry->driver_data;
+-
+-	cam->ipu = ipu_get_soc(ipu_id);
+-	if (cam->ipu == NULL) {
+-		pr_err("ERROR: v4l2 capture: failed to get ipu\n");
+-		return -EINVAL;
+-	} else if (cam->ipu == ERR_PTR(-ENODEV)) {
+-		pr_err("ERROR: v4l2 capture: get invalid ipu\n");
+-		return -ENODEV;
+-	}
+-
+-	init_MUTEX(&cam->param_lock);
+-	init_MUTEX(&cam->busy_lock);
+-
+-	cam->video_dev = video_device_alloc();
+-	if (cam->video_dev == NULL)
+-		return -ENODEV;
+ 
+-	*(cam->video_dev) = mxc_v4l_template;
++	for (ain = 0; ain < ain_num; ain++) {
++		cam_data *cam = &cam_pool[ain];
+ 
+-	video_set_drvdata(cam->video_dev, cam);
+-	dev_set_drvdata(&pdev->dev, (void *)cam);
+-	cam->video_dev->minor = -1;
++		cam->ain_num = ain_num;
++		cam->ain = ain;
+ 
+-	init_waitqueue_head(&cam->enc_queue);
+-	init_waitqueue_head(&cam->still_queue);
+-
+-	/* setup cropping */
+-	cam->crop_bounds.left = 0;
+-	cam->crop_bounds.width = 640;
+-	cam->crop_bounds.top = 0;
+-	cam->crop_bounds.height = 480;
+-	cam->crop_current = cam->crop_defrect = cam->crop_bounds;
+-	ipu_csi_set_window_size(cam->ipu, cam->crop_current.width,
+-				cam->crop_current.height, cam->csi);
+-	ipu_csi_set_window_pos(cam->ipu, cam->crop_current.left,
+-				cam->crop_current.top, cam->csi);
+-	cam->streamparm.parm.capture.capturemode = 0;
+-
+-	cam->standard.index = 0;
+-	cam->standard.id = V4L2_STD_UNKNOWN;
+-	cam->standard.frameperiod.denominator = 30;
+-	cam->standard.frameperiod.numerator = 1;
+-	cam->standard.framelines = 480;
+-	cam->standard_autodetect = true;
+-	cam->streamparm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+-	cam->streamparm.parm.capture.timeperframe = cam->standard.frameperiod;
+-	cam->streamparm.parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+-	cam->overlay_on = false;
+-	cam->capture_on = false;
+-	cam->v4l2_fb.flags = V4L2_FBUF_FLAG_OVERLAY;
++		pr_debug("   SK: init_camera_struct cam=0x%x ain=%d\n", (u32)cam, cam->ain);
++		
++		cam->devtype = pdev->id_entry->driver_data;
++
++		cam->ipu = ipu_get_soc(ipu_id);
++		if (cam->ipu == NULL) {
++			pr_err("ERROR: v4l2 capture: failed to get ipu\n");
++			return NULL;
++		} else if (cam->ipu == ERR_PTR(-ENODEV)) {
++			pr_err("ERROR: v4l2 capture: get invalid ipu\n");
++			return NULL;
++		}
++
++		init_MUTEX(&cam->param_lock);
++		init_MUTEX(&cam->busy_lock);
++
++		cam->video_dev = video_device_alloc();
++		if (cam->video_dev == NULL)
++			return NULL;
++
++		*(cam->video_dev) = mxc_v4l_template;
++
++		video_set_drvdata(cam->video_dev, cam);
++		cam->video_dev->minor = -1;
++
++		init_waitqueue_head(&cam->enc_queue);
++		init_waitqueue_head(&cam->still_queue);
++
++		/* setup cropping */
++		cam->crop_bounds.left = 0;
++		cam->crop_bounds.width = 640;
++		cam->crop_bounds.top = 0;
++		cam->crop_bounds.height = 480;
++		cam->crop_current = cam->crop_defrect = cam->crop_bounds;
++
++		cam->streamparm.parm.capture.capturemode = 0;
++
++		cam->standard.index = 0;
++		cam->standard.id = V4L2_STD_UNKNOWN;
++		cam->standard.frameperiod.denominator = 30;
++		cam->standard.frameperiod.numerator = 1;
++		cam->standard.framelines = 480;
++		cam->standard_autodetect = true;
++		cam->streamparm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
++		cam->streamparm.parm.capture.timeperframe = cam->standard.frameperiod;
++		cam->streamparm.parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
++		cam->overlay_on = false;
++		cam->capture_on = false;
++		cam->v4l2_fb.flags = V4L2_FBUF_FLAG_OVERLAY;
+ 
+-	cam->v2f.fmt.pix.sizeimage = 352 * 288 * 3 / 2;
+-	cam->v2f.fmt.pix.bytesperline = 288 * 3 / 2;
+-	cam->v2f.fmt.pix.width = 288;
+-	cam->v2f.fmt.pix.height = 352;
+-	cam->v2f.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;
+-	cam->win.w.width = 160;
+-	cam->win.w.height = 160;
+-	cam->win.w.left = 0;
+-	cam->win.w.top = 0;
+-
+-	cam->ipu_id = ipu_id;
+-	cam->csi = csi_id;
+-	cam->mclk_source = mclk_source;
+-	cam->mclk_on[cam->mclk_source] = false;
+-
+-	cam->enc_callback = camera_callback;
+-	init_waitqueue_head(&cam->power_queue);
+-	spin_lock_init(&cam->queue_int_lock);
+-	spin_lock_init(&cam->dqueue_int_lock);
+-
+-	cam->self = kmalloc(sizeof(struct v4l2_int_device), GFP_KERNEL);
+-	cam->self->module = THIS_MODULE;
+-	sprintf(cam->self->name, "mxc_v4l2_cap%d", cam->csi);
+-	cam->self->type = v4l2_int_type_master;
+-	cam->self->u.master = &mxc_v4l2_master;
++		cam->v2f.fmt.pix.sizeimage = 352 * 288 * 3 / 2;
++		cam->v2f.fmt.pix.bytesperline = 288 * 3 / 2;
++		cam->v2f.fmt.pix.width = 288;
++		cam->v2f.fmt.pix.height = 352;
++		cam->v2f.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;
++		cam->win.w.width = 160;
++		cam->win.w.height = 160;
++		cam->win.w.left = 0;
++		cam->win.w.top = 0;
++
++		cam->ipu_id = ipu_id;
++		cam->csi = csi_id;
++		cam->mclk_source = mclk_source;
++		cam->mclk_on[cam->mclk_source] = false;
++
++		cam->enc_callback = 
++			(cam->ain_num > 1) ? camera_callback_multi_ain : camera_callback;
++		init_waitqueue_head(&cam->power_queue);
++		spin_lock_init(&cam->queue_int_lock);
++		spin_lock_init(&cam->dqueue_int_lock);
++	}
++
++	cam_pool->self = kmalloc(sizeof(struct v4l2_int_device), GFP_KERNEL);
++	cam_pool->self->module = THIS_MODULE;
++	sprintf(cam_pool->self->name, "mxc_v4l2_cap%d", cam_pool->csi);
++	cam_pool->self->type = v4l2_int_type_master;
++	cam_pool->self->u.master = &mxc_v4l2_master;
++
++	ipu_csi_set_window_size(cam_pool->ipu, cam_pool->crop_current.width,
++				cam_pool->crop_current.height, cam_pool->csi);
++	ipu_csi_set_window_pos(cam_pool->ipu, cam_pool->crop_current.left,
++				cam_pool->crop_current.top, cam_pool->csi);
++				
++	dev_set_drvdata(&pdev->dev, (void *)cam_pool);
+ 
+-	return 0;
++	return cam_pool;
+ }
+ 
+ static ssize_t show_streaming(struct device *dev,
+@@ -2771,45 +2945,51 @@
+  */
+ static int mxc_v4l2_probe(struct platform_device *pdev)
+ {
++	int ain;
+ 	/* Create cam and initialize it. */
+-	cam_data *cam = kmalloc(sizeof(cam_data), GFP_KERNEL);
+-	if (cam == NULL) {
++	cam_data *cam_pool = init_camera_struct(pdev);
++	if (cam_pool == NULL) {
+ 		pr_err("ERROR: v4l2 capture: failed to register camera\n");
+ 		return -1;
+ 	}
+-
+-	init_camera_struct(cam, pdev);
++	
+ 	pdev->dev.release = camera_platform_release;
+ 
+-	/* Set up the v4l2 device and register it*/
+-	cam->self->priv = cam;
+-	v4l2_int_device_register(cam->self);
+-
+-	/* register v4l video device */
+-	if (video_register_device(cam->video_dev, VFL_TYPE_GRABBER, video_nr)
+-	    == -1) {
+-		kfree(cam);
+-		cam = NULL;
+-		pr_err("ERROR: v4l2 capture: video_register_device failed\n");
+-		return -1;
+-	}
+-	pr_debug("   Video device registered: %s #%d\n",
+-		 cam->video_dev->name, cam->video_dev->minor);
++	for (ain = 0; ain < cam_pool->ain_num; ain++) {
++		cam_data *cam = &cam_pool[ain];
++		
++		if (ain == 0) {
++			/* Set up the v4l2 device and register it*/
++			cam->self->priv = cam;
++			v4l2_int_device_register(cam->self);
++			INIT_WORK(&cam->ain_switch_work, ain_switch);
++		}
++		
++		/* register v4l video device */
++		if (video_register_device(cam->video_dev, VFL_TYPE_GRABBER, video_nr) == -1) {
++			kfree(cam_pool);
++			cam_pool = NULL;
++			pr_err("ERROR: v4l2 capture: video_register_device failed ain=%d\n", ain);
++			return -1;
++		}
++		pr_debug("   Video device registered: ain=%d %s #%d\n",
++			ain, cam->video_dev->name, cam->video_dev->minor);
+ 
+-	if (device_create_file(&cam->video_dev->dev,
+-			&dev_attr_fsl_v4l2_capture_property))
+-		dev_err(&pdev->dev, "Error on creating sysfs file"
+-			" for capture\n");
+-
+-	if (device_create_file(&cam->video_dev->dev,
+-			&dev_attr_fsl_v4l2_overlay_property))
+-		dev_err(&pdev->dev, "Error on creating sysfs file"
+-			" for overlay\n");
+-
+-	if (device_create_file(&cam->video_dev->dev,
+-			&dev_attr_fsl_csi_property))
+-		dev_err(&pdev->dev, "Error on creating sysfs file"
+-			" for csi number\n");
++		if (device_create_file(&cam->video_dev->dev,
++				&dev_attr_fsl_v4l2_capture_property))
++			dev_err(&pdev->dev, "Error on creating sysfs file"
++			" for capture ain=%d\n", ain);
++
++		if (device_create_file(&cam->video_dev->dev,
++				&dev_attr_fsl_v4l2_overlay_property))
++			dev_err(&pdev->dev, "Error on creating sysfs file"
++			" for overlay ain=%d\n", ain);
++
++		if (device_create_file(&cam->video_dev->dev,
++				&dev_attr_fsl_csi_property))
++			dev_err(&pdev->dev, "Error on creating sysfs file"
++			" for csi number ain=%d\n", ain);
++	}
+ 
+ 	return 0;
+ }
+@@ -2959,74 +3139,82 @@
+  */
+ static int mxc_v4l2_master_attach(struct v4l2_int_device *slave)
+ {
+-	cam_data *cam = slave->u.slave->master->priv;
++	cam_data *cam_pool = slave->u.slave->master->priv;
+ 	struct v4l2_format cam_fmt;
+-	int i;
++	int i, ain;
+ 	struct sensor_data *sdata = slave->priv;
+ 
+ 	pr_debug("In MVC: mxc_v4l2_master_attach\n");
+ 	pr_debug("   slave.name = %s\n", slave->name);
+ 	pr_debug("   master.name = %s\n", slave->u.slave->master->name);
+ 
++	pr_debug("   SK: master_attach cam=0x%x ain=%d\n", (u32)cam_pool, cam_pool->ain);
++
+ 	if (slave == NULL) {
+ 		pr_err("ERROR: v4l2 capture: slave parameter not valid.\n");
+ 		return -1;
+ 	}
+ 
+-	if (sdata->csi != cam->csi) {
++	if (sdata->csi != cam_pool->csi) {
+ 		pr_debug("%s: csi doesn't match\n", __func__);
+ 		return -1;
+ 	}
+ 
+-	cam->sensor = slave;
+-
+-	if (cam->sensor_index < MXC_SENSOR_NUM) {
+-		cam->all_sensors[cam->sensor_index] = slave;
+-		cam->sensor_index++;
++	if (cam_pool->sensor_index < MXC_SENSOR_NUM) {
++		cam_pool->all_sensors[cam_pool->sensor_index] = slave;
++		cam_pool->sensor_index++;
+ 	} else {
+ 		pr_err("ERROR: v4l2 capture: slave number exceeds the maximum.\n");
+ 		return -1;
+ 	}
+ 
+-	for (i = 0; i < cam->sensor_index; i++) {
+-		vidioc_int_dev_exit(cam->all_sensors[i]);
+-		vidioc_int_s_power(cam->all_sensors[i], 0);
++	for (i = 0; i < cam_pool->sensor_index; i++) {
++		vidioc_int_dev_exit(cam_pool->all_sensors[i]);
++		vidioc_int_s_power(cam_pool->all_sensors[i], 0);
+ 	}
+ 
+ 	cam_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+-	vidioc_int_g_fmt_cap(cam->sensor, &cam_fmt);
++	vidioc_int_g_fmt_cap(slave, &cam_fmt);
+ 
+-	/* Used to detect TV in (type 1) vs. camera (type 0)*/
+-	cam->device_type = cam_fmt.fmt.pix.priv;
++	for (ain = 0; ain < cam_pool->ain_num; ain++) {
++		cam_data *cam = &cam_pool[ain];
+ 
+-	/* Set the input size to the ipu for this device */
+-	cam->crop_bounds.top = cam->crop_bounds.left = 0;
+-	cam->crop_bounds.width = cam_fmt.fmt.pix.width;
+-	cam->crop_bounds.height = cam_fmt.fmt.pix.height;
++		cam->sensor = slave;
+ 
+-	/* This also is the max crop size for this device. */
+-	cam->crop_defrect.top = cam->crop_defrect.left = 0;
+-	cam->crop_defrect.width = cam_fmt.fmt.pix.width;
+-	cam->crop_defrect.height = cam_fmt.fmt.pix.height;
+-
+-	/* At this point, this is also the current image size. */
+-	cam->crop_current.top = cam->crop_current.left = 0;
+-	cam->crop_current.width = cam_fmt.fmt.pix.width;
+-	cam->crop_current.height = cam_fmt.fmt.pix.height;
++		/* Used to detect TV in (type 1) vs. camera (type 0)*/
++		cam->device_type = cam_fmt.fmt.pix.priv;
+ 
+-	pr_debug("End of %s: v2f pix widthxheight %d x %d\n",
+-		 __func__,
+-		 cam->v2f.fmt.pix.width, cam->v2f.fmt.pix.height);
+-	pr_debug("End of %s: crop_bounds widthxheight %d x %d\n",
+-		 __func__,
+-		 cam->crop_bounds.width, cam->crop_bounds.height);
+-	pr_debug("End of %s: crop_defrect widthxheight %d x %d\n",
+-		 __func__,
+-		 cam->crop_defrect.width, cam->crop_defrect.height);
+-	pr_debug("End of %s: crop_current widthxheight %d x %d\n",
+-		 __func__,
+-		 cam->crop_current.width, cam->crop_current.height);
++		/* Set the input size to the ipu for this device */
++		cam->crop_bounds.top = cam->crop_bounds.left = 0;
++		cam->crop_bounds.width = cam_fmt.fmt.pix.width;
++		cam->crop_bounds.height = cam_fmt.fmt.pix.height;
++
++		/* This also is the max crop size for this device. */
++		cam->crop_defrect.top = cam->crop_defrect.left = 0;
++		cam->crop_defrect.width = cam_fmt.fmt.pix.width;
++		cam->crop_defrect.height = cam_fmt.fmt.pix.height;
+ 
++		/* At this point, this is also the current image size. */
++		cam->crop_current.top = cam->crop_current.left = 0;
++		cam->crop_current.width = cam_fmt.fmt.pix.width;
++		cam->crop_current.height = cam_fmt.fmt.pix.height;
++
++		if (ain == 0) {
++			pr_debug("End of %s: v2f pix widthxheight %d x %d\n",
++				__func__,
++				cam->v2f.fmt.pix.width, cam->v2f.fmt.pix.height);
++			pr_debug("End of %s: crop_bounds widthxheight %d x %d\n",
++				__func__,
++				cam->crop_bounds.width, cam->crop_bounds.height);
++			pr_debug("End of %s: crop_defrect widthxheight %d x %d\n",
++				__func__,
++				cam->crop_defrect.width, cam->crop_defrect.height);
++			pr_debug("End of %s: crop_current widthxheight %d x %d\n",
++				__func__,
++				cam->crop_current.width, cam->crop_current.height);
++		}
++	}
++	
+ 	return 0;
+ }
+ 
+diff -ur fsl/drivers/media/platform/mxc/capture/mxc_v4l2_capture.h sk/drivers/media/platform/mxc/capture/mxc_v4l2_capture.h
+--- fsl/drivers/media/platform/mxc/capture/mxc_v4l2_capture.h	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/media/platform/mxc/capture/mxc_v4l2_capture.h	2014-10-24 21:56:06.000000000 +0400
+@@ -210,6 +210,12 @@
+ 	bool mclk_on[2];	/* two mclk sources at most now */
+ 	int current_input;
+ 
++	int ain_num;
++	int ain_active;
++	int ain;
++	int ain_switch_req;
++	struct work_struct ain_switch_work;
++
+ 	int local_buf_num;
+ 
+ 	/* camera sensor interface */
+diff -ur fsl/drivers/mmc/core/sd.c sk/drivers/mmc/core/sd.c
+--- fsl/drivers/mmc/core/sd.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/mmc/core/sd.c	2014-12-06 00:25:13.000000000 +0300
+@@ -514,6 +514,13 @@
+ 	else {
+ 		mmc_set_timing(card->host, timing);
+ 		mmc_set_clock(card->host, card->sw_caps.uhs_max_dtr);
++
++		/*
++		 * FIXME: Sandisk SD3.0 cards DDR50 mode requires such
++		 * delay to get stable, without this delay we may encounter
++		 * CRC errors after switch to DDR50 mode
++		 */
++		mmc_delay(100);
+ 	}
+ 
+ 	return 0;
+diff -ur fsl/drivers/mxc/ipu3/ipu_common.c sk/drivers/mxc/ipu3/ipu_common.c
+--- fsl/drivers/mxc/ipu3/ipu_common.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/mxc/ipu3/ipu_common.c	2014-10-24 21:56:06.000000000 +0400
+@@ -2541,6 +2541,44 @@
+ }
+ EXPORT_SYMBOL(ipu_disable_csi);
+ 
++int32_t quick_enable_csi(struct ipu_soc *ipu, uint32_t csi)
++{
++	uint32_t reg;
++
++	if (csi > 1) {
++		dev_err(ipu->dev, "Wrong csi num_%d\n", csi);
++		return -EINVAL;
++	}
++
++	reg = ipu_cm_read(ipu, IPU_CONF);
++	if (csi == 0)
++		ipu_cm_write(ipu, reg | IPU_CONF_CSI0_EN | IPU_CONF_SMFC_EN, IPU_CONF);
++	else
++		ipu_cm_write(ipu, reg | IPU_CONF_CSI1_EN | IPU_CONF_SMFC_EN, IPU_CONF);
++
++	return 0;
++}
++EXPORT_SYMBOL(quick_enable_csi);
++
++int32_t quick_disable_csi(struct ipu_soc *ipu, uint32_t csi)
++{
++	uint32_t reg;
++
++	if (csi > 1) {
++		dev_err(ipu->dev, "Wrong csi num_%d\n", csi);
++		return -EINVAL;
++	}
++
++	reg = ipu_cm_read(ipu, IPU_CONF);
++	if (csi == 0)
++		ipu_cm_write(ipu, reg & ~(IPU_CONF_CSI0_EN | IPU_CONF_SMFC_EN), IPU_CONF);
++	else
++		ipu_cm_write(ipu, reg & ~(IPU_CONF_CSI1_EN | IPU_CONF_SMFC_EN), IPU_CONF);
++
++	return 0;
++}
++EXPORT_SYMBOL(quick_disable_csi);
++
+ static irqreturn_t ipu_sync_irq_handler(int irq, void *desc)
+ {
+ 	struct ipu_soc *ipu = desc;
+diff -ur fsl/drivers/net/ethernet/realtek/r8169.c sk/drivers/net/ethernet/realtek/r8169.c
+--- fsl/drivers/net/ethernet/realtek/r8169.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/net/ethernet/realtek/r8169.c	2014-10-24 21:56:06.000000000 +0400
+@@ -843,8 +843,16 @@
+ 
+ static void rtl_tx_performance_tweak(struct pci_dev *pdev, u16 force)
+ {
++#if 0
+ 	pcie_capability_clear_and_set_word(pdev, PCI_EXP_DEVCTL,
+ 					   PCI_EXP_DEVCTL_READRQ, force);
++#endif
++	u16 ctl;
++
++	pcie_capability_read_word(pdev, PCI_EXP_DEVCTL, &ctl);
++	dev_info(&pdev->dev, "MRRS = %d, MPS = %d\n", 
++		128 << ((ctl & PCI_EXP_DEVCTL_READRQ) >> 12),
++		128 << ((ctl & PCI_EXP_DEVCTL_PAYLOAD) >> 5));
+ }
+ 
+ struct rtl_cond {
+diff -ur fsl/drivers/pci/quirks.c sk/drivers/pci/quirks.c
+--- fsl/drivers/pci/quirks.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/pci/quirks.c	2015-02-18 14:16:15.000000000 +0300
+@@ -2783,6 +2783,14 @@
+ DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_VENDOR_ID_TI, 0xb800,
+ 				 PCI_CLASS_NOT_DEFINED, 0, fixup_ti816x_class);
+ 
++static void fixup_tw6869_class(struct pci_dev* dev)
++{
++	dev_info(&dev->dev, "Setting PCI class for tw6868 PCIe device\n");
++	dev->class = PCI_CLASS_MULTIMEDIA_VIDEO;
++}
++DECLARE_PCI_FIXUP_CLASS_EARLY(0x1797, 0x6869, 
++				PCI_CLASS_NOT_DEFINED, 0, fixup_tw6869_class);
++
+ /* Some PCIe devices do not work reliably with the claimed maximum
+  * payload size supported.
+  */
+diff -ur fsl/drivers/video/mxc/ldb.c sk/drivers/video/mxc/ldb.c
+--- fsl/drivers/video/mxc/ldb.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/video/mxc/ldb.c	2014-10-24 21:56:06.000000000 +0400
+@@ -159,6 +159,14 @@
+ 	 0,
+ 	 FB_VMODE_NONINTERLACED,
+ 	 FB_MODE_IS_DETAILED,},
++	{
++	 "SK-ATM0704", 60, 800, 480, 30000,
++	 220, 40,
++	 21, 7,
++	 60, 10,
++	 0,
++	 FB_VMODE_NONINTERLACED,
++	 FB_MODE_IS_DETAILED,},
+ };
+ static int ldb_modedb_sz = ARRAY_SIZE(ldb_modedb);
+ 
+diff -ur fsl/drivers/video/mxc/mxc_lcdif.c sk/drivers/video/mxc/mxc_lcdif.c
+--- fsl/drivers/video/mxc/mxc_lcdif.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/drivers/video/mxc/mxc_lcdif.c	2014-10-24 21:56:06.000000000 +0400
+@@ -48,6 +48,16 @@
+ 	FB_SYNC_CLK_LAT_FALL,
+ 	FB_VMODE_NONINTERLACED,
+ 	0,},
++	{
++	"SK-ATM0704", 60, 800, 480, 29850, 220, 40, 21, 7, 60, 10,
++	FB_SYNC_CLK_LAT_FALL,
++	FB_VMODE_NONINTERLACED,
++	0,},
++	{
++	"SK-MI0430", 60, 480, 272, 150000, 40, 60, 10, 10, 20, 10,
++	FB_SYNC_CLK_LAT_FALL,
++	FB_VMODE_NONINTERLACED,
++	0,},
+ };
+ static int lcdif_modedb_sz = ARRAY_SIZE(lcdif_modedb);
+ 
+diff -ur fsl/include/linux/ipu-v3.h sk/include/linux/ipu-v3.h
+--- fsl/include/linux/ipu-v3.h	2014-09-18 21:48:51.000000000 +0400
++++ sk/include/linux/ipu-v3.h	2014-10-24 21:56:06.000000000 +0400
+@@ -638,6 +638,9 @@
+ int32_t ipu_enable_csi(struct ipu_soc *ipu, uint32_t csi);
+ int32_t ipu_disable_csi(struct ipu_soc *ipu, uint32_t csi);
+ 
++int32_t quick_enable_csi(struct ipu_soc *ipu, uint32_t csi);
++int32_t quick_disable_csi(struct ipu_soc *ipu, uint32_t csi);
++
+ int ipu_lowpwr_display_enable(void);
+ int ipu_lowpwr_display_disable(void);
+ 
+diff -ur fsl/sound/soc/fsl/imx-hdmi-dma.c sk/sound/soc/fsl/imx-hdmi-dma.c
+--- fsl/sound/soc/fsl/imx-hdmi-dma.c	2014-09-18 21:48:51.000000000 +0400
++++ sk/sound/soc/fsl/imx-hdmi-dma.c	2014-10-24 21:56:06.000000000 +0400
+@@ -286,6 +286,7 @@
+ 	}
+ }
+ 
++#define HDMI_DMA_NO_NEON
+ #ifdef HDMI_DMA_NO_NEON
+ /* Optimization for IEC head */
+ static void hdmi_dma_copy_16_c_lut(u16 *src, u32 *dst, int samples,
+diff -ur fsl/sound/soc/fsl/Kconfig sk/sound/soc/fsl/Kconfig
+--- fsl/sound/soc/fsl/Kconfig	2014-09-18 21:48:51.000000000 +0400
++++ sk/sound/soc/fsl/Kconfig	2014-10-24 21:56:07.000000000 +0400
+@@ -221,6 +221,18 @@
+ 	  Say Y if you want to add support for SoC audio on an i.MX board with
+ 	  a sgtl5000 codec.
+ 
++config SND_SOC_IMX_TLV320
++	tristate "SoC Audio support for i.MX boards with tlv320aic23"
++	depends on OF && I2C
++	select SND_SOC_TLV320AIC23
++	select SND_SOC_IMX_PCM_DMA
++	select SND_SOC_IMX_AUDMUX
++	select SND_SOC_FSL_SSI
++	select SND_SOC_FSL_UTILS
++	help
++	  Say Y if you want to add support for SoC audio on an i.MX board with
++	  a tlv320aic23 codec.
++
+ config SND_SOC_IMX_SPDIF
+ 	tristate "SoC Audio support for i.MX boards with S/PDIF"
+ 	select SND_SOC_IMX_PCM_DMA
+diff -ur fsl/sound/soc/fsl/Makefile sk/sound/soc/fsl/Makefile
+--- fsl/sound/soc/fsl/Makefile	2014-09-18 21:48:51.000000000 +0400
++++ sk/sound/soc/fsl/Makefile	2014-10-24 21:56:07.000000000 +0400
+@@ -54,6 +54,7 @@
+ snd-soc-wm1133-ev1-objs := wm1133-ev1.o
+ snd-soc-imx-cs42888-objs := imx-cs42888.o
+ snd-soc-imx-sgtl5000-objs := imx-sgtl5000.o
++snd-soc-imx-tlv320-objs := imx-tlv320.o
+ snd-soc-imx-wm8962-objs := imx-wm8962.o
+ snd-soc-imx-spdif-objs := imx-spdif.o
+ snd-soc-imx-mc13783-objs := imx-mc13783.o
+@@ -66,6 +67,7 @@
+ obj-$(CONFIG_SND_MXC_SOC_WM1133_EV1) += snd-soc-wm1133-ev1.o
+ obj-$(CONFIG_SND_SOC_IMX_CS42888) += snd-soc-imx-cs42888.o
+ obj-$(CONFIG_SND_SOC_IMX_SGTL5000) += snd-soc-imx-sgtl5000.o
++obj-$(CONFIG_SND_SOC_IMX_TLV320) += snd-soc-imx-tlv320.o
+ obj-$(CONFIG_SND_SOC_IMX_WM8962) += snd-soc-imx-wm8962.o
+ obj-$(CONFIG_SND_SOC_IMX_SPDIF) += snd-soc-imx-spdif.o
+ obj-$(CONFIG_SND_SOC_IMX_MC13783) += snd-soc-imx-mc13783.o

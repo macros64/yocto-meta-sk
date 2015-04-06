@@ -1,0 +1,24 @@
+/*
+ * Copyright 2014 starterkit.ru
+ *
+ * The code contained herein is licensed under the GNU General Public
+ * License V2.
+ */
+
+/dts-v1/;
+
+#include "imx6dl.dtsi"
+#include "imx6qdl-hola.dtsi"
+
+/ {
+	model = "Starterkit i.MX6 Solo Hola-PC Board";
+	compatible = "sk,imx6dl-hola", "fsl,imx6dl-sabresd", "fsl,imx6dl";
+
+	memory {
+		reg = <0x10000000 0x20000000>;
+	};
+};
+
+&mxcfb1 {
+	status = "okay";
+};

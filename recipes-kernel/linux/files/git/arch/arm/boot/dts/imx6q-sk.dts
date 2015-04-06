@@ -1,0 +1,36 @@
+/*
+ * Copyright 2014 starterkit.ru
+ *
+ * The code contained herein is licensed under the GNU General Public
+ * License V2.
+ */
+
+/dts-v1/;
+
+#include "imx6q.dtsi"
+#include "imx6qdl-sk.dtsi"
+
+/ {
+	model = "Starterkit i.MX6 Quad Board";
+	compatible = "sk,imx6q-sk", "fsl,imx6q-sabresd", "fsl,imx6q";
+
+	memory {
+		reg = <0x10000000 0x40000000>;
+	};
+};
+
+&mxcfb1 {
+	status = "okay";
+};
+
+&mxcfb2 {
+	status = "okay";
+};
+
+&mxcfb3 {
+	status = "okay";
+};
+
+&mxcfb4 {
+	status = "okay";
+};

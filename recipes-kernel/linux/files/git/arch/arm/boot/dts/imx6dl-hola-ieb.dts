@@ -1,0 +1,126 @@
+/*
+ * Copyright 2014 starterkit.ru
+ *
+ * The code contained herein is licensed under the GNU General Public
+ * License V2.
+ */
+
+/dts-v1/;
+
+#include "imx6dl.dtsi"
+#include "imx6qdl-hola.dtsi"
+
+/ {
+	model = "Starterkit i.MX6 Solo Hola-PC Board with Interfaces Extension Board";
+	compatible = "sk,imx6dl-hola", "fsl,imx6dl-sabresd", "fsl,imx6dl";
+
+	memory {
+		reg = <0x10000000 0x20000000>;
+	};
+
+	sound {
+		compatible = "fsl,imx-audio-tlv320";
+		model = "imx-tlv320";
+		ssi-controller = <&ssi2>;
+		audio-codec = <&codec>;
+		audio-routing =
+			"MICIN", "Mic Jack",
+			"Headphone Jack", "LHPOUT",
+			"Headphone Jack", "RHPOUT";
+		mux-int-port = <2>;
+		mux-ext-port = <5>;
+	};
+
+	sound-spdif {
+		compatible = "fsl,imx-audio-spdif",
+				"fsl,imx-sabreauto-spdif";
+		model = "imx-spdif";
+		spdif-controller = <&spdif>;
+		spdif-out;
+	};
+};
+
+&audmux {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_audmux_hola>;
+	status = "okay";
+};
+
+&ecspi4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ecspi4_hola>;
+	fsl,spi-num-chipselects = <1>;
+	cs-gpios = <&gpio3 20 0>;
+	status = "okay";
+
+	tsc2046@0 {
+		compatible = "ti,tsc2046";
+		reg = <0>;
+		spi-max-frequency = <100000>;
+		/* pen irq is GPIO3_19 */
+		interrupt-parent = <&gpio3>;
+		interrupts = <19 0x2>;
+		pendown-gpio = <&gpio3 19 0>;
+		vcc-supply = <&reg_3p3v>;
+
+		ti,x-min = <150>;
+		ti,x-max = <3830>;
+		ti,y-min = <190>;
+		ti,y-max = <3830>;
+
+		linux,wakeup;
+	};
+};
+
+&flexcan2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_flexcan2_hola>;
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1_hola>;
+	clock-frequency = <100000>;
+	status = "okay";
+
+	codec: tlv320aic23@1a {
+		compatible = "ti,tlv320aic23";
+		reg = <0x1a>;
+		clocks = <&clks 200>;
+		clock-frequency = <12000000>;
+	};
+};
+
+&mxcfb1 {
+	status = "okay";
+};
+
+&mxcfb2 {
+	status = "okay";
+};
+
+&pcie {
+	reset-gpio = <&gpio2 14 0>;
+	status = "okay";
+};
+
+&spdif {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_spdif_hola>;
+	status = "okay";
+};
+
+&ssi2 {
+	fsl,mode = "i2s-slave";
+	status = "okay";
+};
+
+&usdhc2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usdhc2_hola>;
+	cd-gpios = <&gpio1 8 0>;            /* pin conflict with uart2 */
+	vmmc-supply = <&reg_3p3v>;
+	no-1-8-v;
+	status = "okay";
+};

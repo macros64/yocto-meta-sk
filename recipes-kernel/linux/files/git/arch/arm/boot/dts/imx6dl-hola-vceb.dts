@@ -1,0 +1,58 @@
+/*
+ * Copyright 2014 starterkit.ru
+ *
+ * The code contained herein is licensed under the GNU General Public
+ * License V2.
+ */
+
+/dts-v1/;
+
+#include "imx6dl.dtsi"
+#include "imx6qdl-hola.dtsi"
+
+/ {
+	model = "Starterkit i.MX6 Solo Hola-PC Board with Video Capture Extension Board";
+	compatible = "sk,imx6dl-hola", "fsl,imx6dl-sabresd", "fsl,imx6dl";
+
+	memory {
+		reg = <0x10000000 0x20000000>;
+	};
+
+	v4l2_cap_0 {
+		compatible = "fsl,imx6q-v4l2-capture";
+		ipu_id = <0>;
+		csi_id = <0>;
+		mclk_source = <0>;
+		ain_num = <1>;
+		status = "okay";
+	};
+};
+
+&i2c3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c3_hola>;
+	clock-frequency = <100000>;
+	status = "okay";
+
+	adv7180: adv7180@21 {
+		compatible = "adv,adv7180";
+		reg = <0x21>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_ipu1_csi_hola>;
+		clocks = <&clks 201>;
+		clock-names = "csi_mclk";
+		DOVDD-supply = <&reg_3p3v>;
+		AVDD-supply = <&reg_3p3v>;
+		DVDD-supply = <&reg_3p3v>;
+		PVDD-supply = <&reg_3p3v>;
+		csi_id = <0>;
+		mclk = <24000000>;
+		mclk_source = <0>;
+		cvbs = <1>;
+		cam_std = <0>; /* 0 - PAL(default), 1 - NTSC J , 2 - NTSC M */
+	};
+};
+
+&mxcfb1 {
+	status = "okay";
+};

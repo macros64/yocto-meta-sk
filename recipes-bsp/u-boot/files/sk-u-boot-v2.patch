@@ -1,0 +1,103 @@
+diff -ur fsl-ga/arch/arm/cpu/armv7/mx6/soc.c sk/arch/arm/cpu/armv7/mx6/soc.c
+--- fsl-ga/arch/arm/cpu/armv7/mx6/soc.c	2015-03-22 19:39:40.000000000 +0300
++++ sk/arch/arm/cpu/armv7/mx6/soc.c	2014-10-11 14:49:11.000000000 +0400
+@@ -724,7 +724,7 @@
+ void s_init(void)
+ {
+ 	struct anatop_regs *anatop = (struct anatop_regs *)ANATOP_BASE_ADDR;
+-	int is_6q = is_cpu_type(MXC_CPU_MX6Q);
++//	int is_6q = is_cpu_type(MXC_CPU_MX6Q);
+ 	int is_6sx = is_cpu_type(MXC_CPU_MX6SX);
+ 	u32 mask480;
+ 	u32 mask528;
+@@ -750,8 +750,8 @@
+ 	/*
+ 	 * Don't reset PFD2 on DL/S
+ 	 */
+-	if (is_6q)
+-		mask528 |= ANATOP_PFD_CLKGATE_MASK(2);
++//	if (is_6q)
++//		mask528 |= ANATOP_PFD_CLKGATE_MASK(2);
+ 	writel(mask480, &anatop->pfd_480_set);
+ 	writel(mask528, &anatop->pfd_528_set);
+ 	writel(mask480, &anatop->pfd_480_clr);
+diff -ur fsl-ga/board/freescale/mx6slevk/mx6slevk.c sk/board/freescale/mx6slevk/mx6slevk.c
+--- fsl-ga/board/freescale/mx6slevk/mx6slevk.c	2015-03-22 19:39:40.000000000 +0300
++++ sk/board/freescale/mx6slevk/mx6slevk.c	2014-08-05 05:30:22.000000000 +0400
+@@ -69,12 +69,12 @@
+ #define PC MUX_PAD_CTRL(I2C_PAD_CTRL)
+ /* I2C1 for PMIC */
+ struct i2c_pads_info i2c_pad_info0 = {
+-	.sda = {
++	.scl = {
+ 		.i2c_mode = MX6_PAD_I2C1_SDA__I2C1_SDA | PC,
+ 		.gpio_mode = MX6_PAD_I2C1_SDA__GPIO_3_13 | PC,
+ 		.gp = IMX_GPIO_NR(3, 13),
+ 	},
+-	.scl = {
++	.sda = {
+ 		.i2c_mode = MX6_PAD_I2C1_SCL__I2C1_SCL | PC,
+ 		.gpio_mode = MX6_PAD_I2C1_SCL__GPIO_3_12 | PC,
+ 		.gp = IMX_GPIO_NR(3, 12),
+diff -ur fsl-ga/boards.cfg sk/boards.cfg
+--- fsl-ga/boards.cfg	2015-03-22 19:39:40.000000000 +0300
++++ sk/boards.cfg	2014-10-18 18:05:48.000000000 +0400
+@@ -347,7 +347,6 @@
+ Active  arm         armv7          mx6         freescale       mx6sabresd          mx6solosabresdandroid                         mx6sabresd:IMX_CONFIG=board/freescale/mx6sabresd/mx6solo_4x_mt41j128.cfg,MX6SOLO,DEFAULT_FDT_FILE="imx6dl-sabresd.dtb",DDR_MB=512,SYS_USE_SPINOR,SYS_NOSMP="nosmp",ANDROID_SUPPORT             Fabio Estevam <fabio.estevam@freescale.com>
+ Active  arm         armv7          mx6         freescale       mx6slevk            mx6slevk                             mx6slevk:IMX_CONFIG=board/freescale/mx6slevk/imximage.cfg,MX6SL,SYS_USE_SPINOR                                                                   Fabio Estevam <fabio.estevam@freescale.com>
+ Active  arm         armv7          mx6         freescale       mx6slevk            mx6slevkandroid                             mx6slevk:IMX_CONFIG=board/freescale/mx6slevk/imximage.cfg,MX6SL,SYS_USE_SPINOR,ANDROID_SUPPORT                                                                   Fabio Estevam <fabio.estevam@freescale.com>
+-
+ Active  arm         armv7          mx6         freescale       mx6slevk            mx6slevk_spinor                      mx6slevk:IMX_CONFIG=board/freescale/mx6slevk/imximage.cfg,MX6SL,SYS_BOOT_SPINOR                                                   Fabio Estevam <fabio.estevam@freescale.com>
+ Active  arm         armv7          mx6         freescale       mx6sx_17x17_arm2  mx6sx_17x17_arm2               mx6sx_17x17_arm2:IMX_CONFIG=board/freescale/mx6sx_17x17_arm2/imximage.cfg,MX6SX,DEFAULT_FDT_FILE="imx6sx-17x17-arm2.dtb"                                                                 Fabio Estevam <fabio.estevam@freescale.com>
+ Active  arm         armv7          mx6         freescale       mx6sx_17x17_arm2  mx6sx_17x17_arm2_spinor     mx6sx_17x17_arm2:IMX_CONFIG=board/freescale/mx6sx_17x17_arm2/imximage.cfg,MX6SX,DEFAULT_FDT_FILE="imx6sx-17x17-arm2.dtb",SYS_BOOT_SPINOR                                                                 Fabio Estevam <fabio.estevam@freescale.com>
+@@ -371,6 +370,22 @@
+ Active  arm         armv7          mx6         gateworks       gw_ventana          gwventanaq1g                         gw_ventana:IMX_CONFIG=board/gateworks/gw_ventana/gw_ventana.cfg,MX6Q,DDR_MB=1024                                                  Tim Harvey <tharvey@gateworks.com>
+ Active  arm         armv7          mx6         gateworks       gw_ventana          gwventanaq1gspi                      gw_ventana:IMX_CONFIG=board/gateworks/gw_ventana/gw_ventana.cfg,MX6Q,DDR_MB=1024,SPI_FLASH                                        Tim Harvey <tharvey@gateworks.com>
+ Active  arm         armv7          mx6         solidrun        hummingboard        hummingboard_solo                    hummingboard:IMX_CONFIG=board/solidrun/hummingboard/solo.cfg,MX6S,DDR_MB=512                                                      Jon Nettleton <jon.nettleton@gmail.com>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_dual                            hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_dual.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-hola.dtb"                  Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_dual_aeeb                       hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_dual.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-hola-aeeb.dtb"             Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_dual_feb                        hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_dual.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-hola-feb.dtb"              Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_dual_ieb                        hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_dual.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-hola-ieb.dtb"              Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_dual_vceb                       hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_dual.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-hola-vceb.dtb"             Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_solo                            hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-hola.dtb"                  Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_solo_aeeb                       hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-hola-aeeb.dtb"             Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_solo_feb                        hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-hola-feb.dtb"              Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_solo_ieb                        hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-hola-ieb.dtb"              Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      hola_imx6           hola_solo_vceb                       hola_imx6:IMX_CONFIG=board/starterkit/hola_imx6/hola_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-hola-vceb.dtb"             Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      oem_imx6            oem_solo_nandboot                    oem_imx6:IMX_CONFIG=board/starterkit/oem_imx6/oem_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-oem.dtb",SYS_BOOT_NAND        Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      oem_imx6            oem_solo                             oem_imx6:IMX_CONFIG=board/starterkit/oem_imx6/oem_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-oem.dtb",SYS_BOOT_MMC         Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      sodimm_imx6         sodimm_dual                          sodimm_imx6:IMX_CONFIG=board/starterkit/sodimm_imx6/sodimm_dual.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-sodimm.dtb"          Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      sodimm_imx6         sodimm_solo                          sodimm_imx6:IMX_CONFIG=board/starterkit/sodimm_imx6/sodimm_solo.cfg,MX6S,DDR_MB=512,DEFAULT_FDT_FILE="imx6dl-sodimm.dtb"          Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      sk_imx6             sk_quad_nandboot                     sk_imx6:IMX_CONFIG=board/starterkit/sk_imx6/sk_quad.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-sk.dtb",SYS_BOOT_NAND            Pavel Ivanchenko <info@starterkit.ru>
++Active  arm         armv7          mx6         starterkit      sk_imx6             sk_quad                              sk_imx6:IMX_CONFIG=board/starterkit/sk_imx6/sk_quad.cfg,MX6Q,DDR_MB=1024,DEFAULT_FDT_FILE="imx6q-sk.dtb",SYS_BOOT_MMC             Pavel Ivanchenko <info@starterkit.ru>
+ Active  arm         armv7          omap3       -               overo               omap3_overo                          -                                                                                                                                 Steve Sakoman <sakoman@gmail.com>
+ Active  arm         armv7          omap3       -               pandora             omap3_pandora                        -                                                                                                                                 Grazvydas Ignotas <notasas@gmail.com>
+ Active  arm         armv7          omap3       8dtech          eco5pk              eco5pk                               -                                                                                                                                 Raphael Assenat <raph@8d.com>
+diff -ur fsl-ga/drivers/mmc/mmc.c sk/drivers/mmc/mmc.c
+--- fsl-ga/drivers/mmc/mmc.c	2015-03-22 19:39:40.000000000 +0300
++++ sk/drivers/mmc/mmc.c	2014-12-08 22:13:02.000000000 +0300
+@@ -1016,8 +1016,10 @@
+ 
+ 	if (IS_SD(mmc))
+ 		err = sd_change_freq(mmc);
+-	else
+-		err = mmc_change_freq(mmc);
++
++	/* SK FIXME: problem with eMMC on i.mx6 solo */
++//	else
++//		err = mmc_change_freq(mmc);
+ 
+ 	if (err)
+ 		return err;
+diff -ur fsl-ga/drivers/mtd/ubi/build.c sk/drivers/mtd/ubi/build.c
+--- fsl-ga/drivers/mtd/ubi/build.c	2015-03-22 19:39:40.000000000 +0300
++++ sk/drivers/mtd/ubi/build.c	2015-02-19 07:07:23.000000000 +0300
+@@ -528,7 +528,7 @@
+ 	ubi->flash_size = ubi->mtd->size;
+ 
+ 	if (mtd_can_have_bb(ubi->mtd))
+-		ubi->bad_allowed = 1;
++		ubi->bad_allowed = 0; // sasa
+ 
+ 	ubi->min_io_size = ubi->mtd->writesize;
+ 	ubi->hdrs_min_io_size = ubi->mtd->writesize >> ubi->mtd->subpage_sft;
