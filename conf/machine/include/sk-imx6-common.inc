@@ -36,15 +36,50 @@ IMAGE_FSTYPES += "tar.bz2 ext3 sdcard"
 #
 # other settings
 #
-PREFERRED_PROVIDER_virtual/xserver ?= "xserver-xorg"
-XSERVER ?= "xserver-xorg \
+XSERVER_DRIVER = "xf86-video-imxfb-vivante"
+PREFERRED_PROVIDER_virtual/xserver = "xserver-xorg"
+XSERVER = "xserver-xorg \
            xf86-input-evdev \
            xf86-input-mouse \
            xf86-video-omapfb \
-           xf86-input-keyboard"
+           xf86-input-keyboard ${XSERVER_DRIVER}"
 
+PREFERRED_VERSION_xserver-xorg = "2:1.14.4"
+PREFERRED_VERSION_directfb = "1.6.3"
+PREFERRED_VERSION_directfb-examples = "1.6.0"
+ 
+
+MACHINE_ARCH_FILTER = "virtual/kernel"
+MACHINE_SOCARCH_FILTER = "libfslcodec libfslvpuwrap libfslparser gst-fsl-plugins"
+MACHINE_SOCARCH_FILTER += " virtual/libopenvg virtual/libgles1 virtual/libgles2 virtual/egl virtual/libg2d"
+#MACHINE_SOCARCH_FILTER += " virtual/mesa virtual/libgl"
+
+INHERIT += "fsl-dynamic-packagearch"
+
+# Firmware
+MACHINE_FIRMWARE = "firmware-imx-vpu-imx6q"
+
+# GStreamer 0.10 plugins
+MACHINE_GSTREAMER_PLUGIN = "gst-fsl-plugin"
+
+# GStreamer 1.0 plugins
+MACHINE_GSTREAMER_1_0_PLUGIN = "gstreamer1.0-plugins-imx-meta"
+
+# mx6 GPU libraries
+PREFERRED_PROVIDER_virtual/egl = "gpu-viv-bin-mx6q"
+PREFERRED_PROVIDER_virtual/libgles1 = "gpu-viv-bin-mx6q"
+PREFERRED_PROVIDER_virtual/libgles2 = "gpu-viv-bin-mx6q"
+PREFERRED_PROVIDER_virtual/libgl = "gpu-viv-bin-mx6q"
+
+# for solo core processors
+#PREFERRED_PROVIDER_virtual/libgles2 ?= "mesa"
+#PREFERRED_PROVIDER_virtual/libgles1 ?= "mesa"
+#PREFERRED_PROVIDER_virtual/libgl ?= "mesa"
+ 
 # Ship all kernel modules by default
-MACHINE_EXTRA_RRECOMMENDS = " kernel-modules"
-MACHINE_FEATURES = "usbgadget usbhost vfat alsa"
+MACHINE_EXTRA_RRECOMMENDS = " kernel-modules udev-rules-imx"
+MACHINE_FEATURES = "usbgadget usbhost vfat alsa touchscreen"
 
 SERIAL_CONSOLE = "115200 ttymxc0"
+
+MACHINE_SOCARCH = "${TUNE_PKGARCH}-mx6qdl"
