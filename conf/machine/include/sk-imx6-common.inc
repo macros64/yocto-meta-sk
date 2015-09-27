@@ -6,8 +6,8 @@ include conf/machine/include/tune-cortexa9.inc
 #
 # linux kernel
 #
-PREFERRED_PROVIDER_virtual/kernel = "linux-yocto-sk"
-PREFERRED_VERSION_linux-yocto-sk = "3.10"
+PREFERRED_PROVIDER_virtual/kernel = "linux-imx"
+PREFERRED_VERSION_linux-imx = "3.14.28"
 KERNEL_IMAGETYPE = "zImage"
 
 
