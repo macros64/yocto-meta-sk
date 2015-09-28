@@ -20,4 +20,4 @@ LIC_FILES_CHKSUM = "file://Licenses/README;md5=025bf9f768cbcb1a165dbe1a110babfb"
 # i was unable to find better solution for it than place under 'git' folder
 SRC_URI += " file://sk-u-boot-201404.patch file://git"
 
-COMPATIBLE_MACHINE = "(sk-imx6q|sk-holaduo)"
+COMPATIBLE_MACHINE = "(sk-imx6q|sk-holaduo|sk-hola)"

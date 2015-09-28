@@ -82,4 +82,4 @@ MACHINE_FEATURES = "usbgadget usbhost vfat alsa touchscreen"
 
 SERIAL_CONSOLE = "115200 ttymxc0"
 
-MACHINE_SOCARCH = "${TUNE_PKGARCH}-mx6qdl"
+MACHINE_SOCARCH_SUFFIX = "sk-imx6"
